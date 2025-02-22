@@ -1,26 +1,52 @@
 #include <stdint.h>
+#include <stdbool.h>
 
 // opcodes for state handler:
 enum {
-    IMM8,IMM16,IMM24,IMM32,PSH,POP,JMP,BZ,BNZ,LDLOC,STLOC,SETST,
+    RET,
+    IMM8,IMM16,IMM24,IMM32,PSH,POP,BZ,BNZ,LDLOC,STLOC,SETST,
     OR,XOR,AND,EQ,NE,LTU,LTS,GTU,GTS,LEU,LES,GEU,GES,
     SHL,SHRU,SHRS,ADD,SUB,MUL,
-    SYSC,RET
+    SYSC
 };
+
+struct trex_sh;
 
 // state machine:
 struct trex_sm {
-    // current state:
-    uint32_t    st;
+    //// { readonly properties of state machine established on create:
+    uint32_t        *locals;
+    uint8_t         locals_count;
+    uint32_t        *stack_min, *stack_max;
 
-    // persistent:
-    uint32_t    *locals;
-    uint32_t    *stack;
+    // list of state handlers:
+    struct trex_sh *handlers;
+    uint16_t        handlers_count;
+    //// }
+
+    //// { mutable properties of state machine:
+    // current state:
+    uint16_t    st;
+    // next state:
+    uint16_t    nxst;
 
     // current handler execution state:
     uint32_t    a;
     uint8_t     *pc;
     uint32_t    *sp;
+    //// }
+};
+
+// state handler:
+struct trex_sh {
+    // where program code starts:
+    uint8_t *pc_start;
+    // where program code ends: (points to last instruction)
+    uint8_t *pc_end;
+
+    bool    verified; // verifier was run
+    bool    valid;    // handler was determined to be valid
+    uint8_t *invalid_pc; // first PC where invalidation occurred
 };
 
 static inline uint32_t ld16(uint8_t **p) {
@@ -44,15 +70,157 @@ static inline uint32_t ld32(uint8_t **p) {
     return a;
 }
 
+// verifies that:
+// * no PC access is out of bounds
+// * no stack access is out of bounds
+// * no local access is out of bounds
+// * stack is empty on return
+// * all branches point to opcode start
+// result is put in sh->verified;
+void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
+    uint8_t     *pc = sh->pc_start;
+    uint32_t    *sp = sm->stack_max;
+
+    // track list of branch-target PCs to verify must be pointed at opcodes
+#define pcva_size 8
+    uint8_t     *pcva[pcva_size];   // theoretical max of 128 branches
+    int         pcv = 0;            // where the next PC to verify is inserted
+
+#define verify_pc(n) if (pc+(n) > sh->pc_end) { goto invalid; }
+#define verify_stack if (sp < sm->stack_min || sp >= sm->stack_max) { goto invalid; }
+
+    while (pc <= sh->pc_end) {
+        // verify the current branch-target PC:
+        if (pcv > 0) {
+            if (pcva[0] < pc) {
+                // did we pass this PC already? it must be inside an opcode:
+                goto invalid;
+            } else if (pcva[0] == pc) {
+                // this PC is valid; strike it from the list:
+                for (int n = 1; n <= pcv; n++) {
+                    pcva[n-1] = pcva[n];
+                }
+                pcv--;
+            } else {
+                // this PC is ahead of us; ignore it for now
+            }
+        }
+
+        uint8_t i = *pc++;
+
+        // PC and stack ops:
+        if      (i == IMM8)  {                                  // load immediate u8
+            verify_pc(0);
+            pc++;
+        }
+        else if (i == IMM16) {                                  // load immediate u16
+            verify_pc(1);
+            pc += 2;
+        }
+        else if (i == IMM24) {                                  // load immediate u24
+            verify_pc(2);
+            pc += 3;
+        }
+        else if (i == IMM32) {                                  // load immediate u32
+            verify_pc(3);
+            pc += 4;
+        }
+        else if (i == PSH) {                                    // push
+            --sp;
+            verify_stack;
+        }
+        else if (i == POP) {                                    // pop
+            verify_stack;
+            sp++;
+        }
+        else if (i == BZ                                        // branch forward if A zero
+              || i == BNZ) {                                    // branch forward if A not zero
+            verify_pc(0);
+            // record branch destination PC for verification:
+            pcva[pcv++] = (pc + *pc) + 1;
+            if (pcv > pcva_size) {
+                // not really invalid, just too many branches in flight for this tiny verifier to handle.
+                goto invalid;
+            }
+            pc++;
+        }
+        else if (i == LDLOC                                     // load from local
+              || i == STLOC) {                                  // store to local
+            verify_pc(0);
+            if (*pc++ >= sm->locals_count) {
+                goto invalid;
+            }
+        }
+        else if (i == SETST) {                                  // set-state
+            verify_pc(1);
+            if (ld16(&pc) >= sm->handlers_count) {
+                goto invalid;
+            }
+        }
+
+        // stack ops:
+        else if (i == OR)   { verify_stack; sp++; }
+        else if (i == XOR)  { verify_stack; sp++; }
+        else if (i == AND)  { verify_stack; sp++; }
+        else if (i == EQ)   { verify_stack; sp++; }
+        else if (i == NE)   { verify_stack; sp++; }
+        else if (i == LTU)  { verify_stack; sp++; }
+        else if (i == LTS)  { verify_stack; sp++; }
+        else if (i == GTU)  { verify_stack; sp++; }
+        else if (i == GTS)  { verify_stack; sp++; }
+        else if (i == LEU)  { verify_stack; sp++; }
+        else if (i == LES)  { verify_stack; sp++; }
+        else if (i == GEU)  { verify_stack; sp++; }
+        else if (i == GES)  { verify_stack; sp++; }
+        else if (i == SHL)  { verify_stack; sp++; }
+        else if (i == SHRU) { verify_stack; sp++; }
+        else if (i == SHRS) { verify_stack; sp++; }
+        else if (i == ADD)  { verify_stack; sp++; }
+        else if (i == SUB)  { verify_stack; sp++; }
+        else if (i == MUL)  { verify_stack; sp++; }
+
+        else if (i == SYSC) {
+            // TODO: syscall
+        } else if (i == RET) {
+            if (sp != sm->stack_max) {
+                // stack must be empty on return
+                goto invalid;
+            }
+        } else {
+            // TODO: unknown opcode
+            goto invalid;
+        }
+    }
+
+#undef verify_stack
+#undef verify_pc
+
+    sh->verified = true;
+    sh->valid = true;
+    sh->invalid_pc = 0;
+    return;
+
+invalid:
+    sh->verified = true;
+    sh->valid = false;
+    sh->invalid_pc = pc;
+}
+
 // execute cycles on the current state handler; this relies on the handler being verified such
 // that no stack access is out of bounds and no local access is out of bounds and no PC access
 // is out of bounds.
 void trex_exec_sm(struct trex_sm* sm, int cycles) {
-    uint8_t     *pc = sm->pc;
-    uint32_t    *sp = sm->sp;
-    uint32_t    a = sm->a;
+    struct trex_sh  *sh = sm->handlers + sm->st;
+    uint8_t         *pc = sm->pc;
+    uint32_t        *sp = sm->sp;
+    uint32_t        a = sm->a;
 
     for (int n = cycles - 1; n >= 0; n--) {
+        if (pc > sh->pc_end) {
+            // TODO: return
+            break;
+        }
+
         uint8_t i = *pc++;
 
         // PC and stack ops:
@@ -62,12 +230,11 @@ void trex_exec_sm(struct trex_sm* sm, int cycles) {
         else if (i == IMM32) a = ld32(&pc);                     // load immediate u32
         else if (i == PSH)   *--sp = a;                         // push
         else if (i == POP)   a = *sp++;                         // pop
-        else if (i == JMP)   pc = (pc + *pc) + 1;               // jump forward
         else if (i == BZ)    pc = (a ? pc : pc + *pc) + 1;      // branch forward if A zero
         else if (i == BNZ)   pc = (a ? pc + *pc : pc) + 1;      // branch forward if A not zero
         else if (i == LDLOC) a = sm->locals[*pc++];             // load from local
         else if (i == STLOC) sm->locals[*pc++] = a;             // store to local
-        else if (i == SETST) sm->st = a;                        // set-state
+        else if (i == SETST) sm->nxst = ld16(&pc);              // set-state
 
         // stack ops:
         else if (i == OR)   a = *sp++ |  a;
@@ -92,7 +259,7 @@ void trex_exec_sm(struct trex_sm* sm, int cycles) {
 
         else if (i == SYSC) {
             // TODO: syscall
-        } else if (i == RET)  {
+        } else if (i == RET) {
             // TODO: return
             break;
         } else {
