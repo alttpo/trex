@@ -85,8 +85,6 @@ Whitespace may be used to separate `sexpr`s where parsing ambiguities arise.
 
 TODO:
 
-* define register file and stack behavior
-* define full instruction set - keep it very simple - int32 operations only - reuse parts of wasm i32 instruction set for easy translation
 * does each state machine get its own register file and stack?
 * clarify state machine reset behavior between states - is stack cleared? are registers cleared?
 
@@ -95,9 +93,11 @@ Example interactive Trex session:
 
 ```lisp
 > (state-machine-create
-    (name 6F32)
-    (priority 8))
-; creates a new state machine with a 32-bit "name". if the machine already exists, all of its state handlers are cleared.
+    (name     6F32)
+    (priority 8)
+    (memory   4)
+)
+; creates a new state machine with a 32-bit "name" of $6F32. all of its state handlers are cleared and it is set to the stopped status.
 < (ack)
 
 > (state-machine-define-state
@@ -106,27 +106,42 @@ Example interactive Trex session:
     (burst 0)
     (handler
         (chip-use fxpak)
-        (chip-address-set 2C00)
+        ; we write all the asm for 2C00 handler except the first byte and then enable it with the final write to 2C00:
+        (chip-address-set 2C01)
         ; write this 65816 asm to fxpak's NMI handler:
         ; 2C00   9C 00 2C   STZ   $2C00
         ; 2C03   6C EA FF   JMP   ($FFEA)
-        (chip-write-big-endian-dword 9C002C6C)
-        (chip-write-big-endian-word  EAFF)
-        (chip-address-set 2C00)
-        ; set-state to 1 and return:
+        (chip-write-big-endian-dword 002C6CEA)
+        (chip-write-advance-byte     FF)
+        ; move to next state:
         (set-state 1)
         (return)
     ))
 < (ack)
 
 > (state-machine-define-state
-    (name  6F32)
+    (name 6F32)
     (state 1)
+    (burst 0)
+    (handler
+        (chip-use fxpak)
+        (chip-address-set 2C00)
+        ; write the first byte of the asm routine to enable it:
+        (chip-write-no-advance-byte 9C)
+        ; move to next state:
+        (set-state 2)
+        (return)
+    ))
+< (ack)
+
+> (state-machine-define-state
+    (name  6F32)
+    (state 2)
     (burst 8) ; execute this state up to 8 times consecutively
     (handler
         ; load into A register
         (chip-read-no-advance-byte)
-        (jz nmi)    ; jump if A is zero to "nmi" label
+        (bz nmi)    ; branch if A is zero to "nmi" label
         (return)    ; else return
     (label nmi)
         ; NMI has fired! read 4 bytes from WRAM at $0010:
@@ -136,8 +151,8 @@ Example interactive Trex session:
         ; append that data to a message and send it:
         (message-append-little-endian-dword)
         (message-send)
-        ; set-state to 0 and return:
-        (set-state 0)
+        ; set-state to 1 and return:
+        (set-state 1)
         (return)
     ))
 < (ack)
