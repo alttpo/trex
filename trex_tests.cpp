@@ -21,16 +21,22 @@ constexpr std::array verify_status_names = {
     std::string_view{"INVALID_STACK_MUST_BE_EMPTY_ON_RETURN"},
 };
 
-
 int main() {
     struct trex_sm sm;
     struct trex_sh sh;
-    uint32_t stack[16] = {0};
+    uint32_t stack[4] = {0};
+    uint32_t locals[16] = {0};
     uint8_t sh_code[] = {
         IMM8, 1,
         BZ,   1,
         RET,
+        LDLOC, 1,
         PSH,
+        PSH,
+        PSH,
+        PSH,
+        PSH,
+        RET,
     };
 
     sh.pc_start = sh_code;
@@ -43,6 +49,8 @@ int main() {
     sm.exec_status = READY;
     sm.stack_min = stack;
     sm.stack_max = stack + sizeof(stack)/sizeof(uint32_t);
+    sm.locals = locals;
+    sm.locals_count = 16;
 
     // verify the handler program:
     trex_sh_verify(&sm, &sh);
