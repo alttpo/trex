@@ -52,6 +52,7 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
             if (pcva[0] < pc) {
                 // did we pass this PC already? it must be inside an opcode:
                 sh->verify_status = INVALID_BRANCH_TARGET;
+                pc = pcva[0];
                 goto invalid;
             } else if (pcva[0] == pc) {
                 // this PC is valid; strike it from the list:
@@ -97,6 +98,7 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
             uint8_t *targetpc = (pc + *pc) + 1;
             if (targetpc >= sh->pc_end+1) {
                 sh->verify_status = INVALID_BRANCH_TARGET;
+                pc = targetpc;
                 goto invalid;
             }
             // record branch destination PC for verification:
@@ -158,6 +160,26 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
             sh->verify_status = INVALID_OPCODE;
             goto invalid;
         }
+    }
+
+    if (pc > sh->pc_end) {
+        sh->verify_status = INVALID_BRANCH_TARGET;
+        goto invalid;
+    }
+
+    // validate remaining branch targets:
+    for (int n = 0; n < pcv; n++) {
+        if (pcva[n] != pc) {
+            sh->verify_status = INVALID_BRANCH_TARGET;
+            pc = pcva[n];
+            goto invalid;
+        }
+    }
+
+    // stack must be empty on return:
+    if (sp != sm->stack_max) {
+        sh->verify_status = INVALID_STACK_MUST_BE_EMPTY_ON_RETURN;
+        goto invalid;
     }
 
 #undef verify_stack

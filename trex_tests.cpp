@@ -28,9 +28,9 @@ int main() {
     uint32_t stack[16] = {0};
     uint8_t sh_code[] = {
         IMM8, 1,
-        BZ,   3,
+        BZ,   1,
         RET,
-        BZ,   0,
+        PSH,
     };
 
     sh.pc_start = sh_code;
@@ -44,17 +44,19 @@ int main() {
     sm.stack_min = stack;
     sm.stack_max = stack + sizeof(stack)/sizeof(uint32_t);
 
+    // verify the handler program:
     trex_sh_verify(&sm, &sh);
 
     std::cout << "verify_status = " << sh.verify_status
         << " (" << verify_status_names[sh.verify_status] << ")"
         << std::endl;
     if (sh.verify_status > VERIFIED) {
-        std::cout << "  at pc = " << (sh.invalid_pc - sh.pc_start);
+        std::cout << "  at pc = " << (sh.invalid_pc - sh.pc_start) << std::endl;
         return 0;
     }
 
-    trex_sm_exec(&sm, 1024);
+    // execute the handler:
+    trex_sm_exec(&sm, 4);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
 
     return 0;
