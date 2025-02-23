@@ -259,7 +259,12 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
         sh = sm->handlers + sm->st;
     }
 
-    // make sure the state handler has been verified and is valid:
+    // don't continue if we're in an ERRORED status:
+    if (sm->exec_status != EXECUTING) {
+        return;
+    }
+
+    // make sure the state handler has been verified:
     if (sh->verify_status != VERIFIED) {
         // TODO: set error
         return;
@@ -321,14 +326,18 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
             sm->expected_pops = s->args;
             sm->expected_push = s->returns;
 
+            sm->sp = sp;
             s->call(sm);
+            sp = sm->sp;
 
             // if we didn't error out, return to EXECUTING status:
             if (sm->exec_status == IN_SYSCALL) {
                 if (sm->expected_pops != 0) {
                     sm->exec_status = ERRORED;
+                    break;
                 } else if (sm->expected_push != 0) {
                     sm->exec_status = ERRORED;
+                    break;
                 } else {
                     sm->exec_status = EXECUTING;
                 }
