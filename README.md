@@ -105,9 +105,9 @@ Example interactive Trex session:
     (state 0)
     (burst 0)
     (handler
-        (chip-use fxpak)
         ; we write all the asm for 2C00 handler except the first byte and then enable it with the final write to 2C00:
-        (chip-address-set 2C01)
+        (chip-use nmix)
+        (chip-address-set 1)
         ; write this 65816 asm to fxpak's NMI handler:
         ; 2C00   9C 00 2C   STZ   $2C00
         ; 2C03   6C EA FF   JMP   ($FFEA)
@@ -124,9 +124,9 @@ Example interactive Trex session:
     (state 1)
     (burst 0)
     (handler
-        (chip-use fxpak)
-        (chip-address-set 2C00)
         ; write the first byte of the asm routine to enable it:
+        (chip-use nmix)
+        (chip-address-set 0)
         (chip-write-no-advance-byte 9C)
         ; move to next state:
         (set-state 2)
