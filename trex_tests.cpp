@@ -12,13 +12,15 @@ constexpr std::array verify_status_names = {
     std::string_view{"UNVERIFIED"},
     std::string_view{"VERIFIED"},
     std::string_view{"INVALID_OPCODE"},
+    std::string_view{"INVALID_OPCODE_INCOMPLETE"},
     std::string_view{"INVALID_STACK_OVERFLOW"},
     std::string_view{"INVALID_STACK_UNDERFLOW"},
-    std::string_view{"INVALID_OPCODE_INCOMPLETE"},
+    std::string_view{"INVALID_STACK_MUST_BE_EMPTY_ON_RETURN"},
     std::string_view{"INVALID_BRANCH_TARGET"},
     std::string_view{"INVALID_LOCAL"},
     std::string_view{"INVALID_STATE"},
-    std::string_view{"INVALID_STACK_MUST_BE_EMPTY_ON_RETURN"},
+    std::string_view{"INVALID_SYSCALL_NUMBER"},
+    std::string_view{"INVALID_SYSCALL_UNMAPPED"},
 };
 
 int main() {

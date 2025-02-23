@@ -25,13 +25,28 @@ static inline uint32_t ld32(uint8_t **p) {
     return a;
 }
 
+// for syscall usage; push a value onto the stack:
+void trex_sm_push(struct trex_sm *sm, uint32_t val) {
+    if (sm->exec_status == IN_SYSCALL) {
+        sm->expected_push--;
+    }
+    *--sm->sp = val;
+}
+
+// for syscall usage; pop a value off the stack:
+void trex_sm_pop(struct trex_sm *sm, uint32_t *o_val) {
+    if (sm->exec_status == IN_SYSCALL) {
+        sm->expected_pops--;
+    }
+    *o_val = *sm->sp++;
+}
+
 // verifies that:
 // * no PC access is out of bounds
 // * no stack access is out of bounds
 // * no local access is out of bounds
 // * stack is empty on return
 // * all branches point to opcode start
-// result is put in sh->verified;
 void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
     uint8_t     *pc = sh->pc_start;
     uint32_t    *sp = sm->stack_max;
@@ -42,8 +57,8 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
     int         pcv = 0;            // where the next PC to verify is inserted
 
 #define verify_pc(n) if (pc+(n) >= sh->pc_end) { sh->verify_status = INVALID_OPCODE_INCOMPLETE; return; }
-#define verify_stack if (sp <   sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW;    return; } \
-                else if (sp >=  sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW;   return; }
+#define verify_stko  if (sp <   sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW;    return; }
+#define verify_stku  if (sp >=  sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW;   return; }
 
     sh->verify_status = UNVERIFIED;
     while (pc < sh->pc_end) {
@@ -88,10 +103,10 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
         }
         else if (i == PSH) {                                    // push
             --sp;
-            verify_stack;
+            verify_stko;
         }
         else if (i == POP) {                                    // pop
-            verify_stack;
+            verify_stku;
             sp++;
         }
         else if (i == BZ                                        // branch forward if A zero
@@ -133,28 +148,54 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
         }
 
         // stack ops:
-        else if (i == OR)   { verify_stack; sp++; }
-        else if (i == XOR)  { verify_stack; sp++; }
-        else if (i == AND)  { verify_stack; sp++; }
-        else if (i == EQ)   { verify_stack; sp++; }
-        else if (i == NE)   { verify_stack; sp++; }
-        else if (i == LTU)  { verify_stack; sp++; }
-        else if (i == LTS)  { verify_stack; sp++; }
-        else if (i == GTU)  { verify_stack; sp++; }
-        else if (i == GTS)  { verify_stack; sp++; }
-        else if (i == LEU)  { verify_stack; sp++; }
-        else if (i == LES)  { verify_stack; sp++; }
-        else if (i == GEU)  { verify_stack; sp++; }
-        else if (i == GES)  { verify_stack; sp++; }
-        else if (i == SHL)  { verify_stack; sp++; }
-        else if (i == SHRU) { verify_stack; sp++; }
-        else if (i == SHRS) { verify_stack; sp++; }
-        else if (i == ADD)  { verify_stack; sp++; }
-        else if (i == SUB)  { verify_stack; sp++; }
-        else if (i == MUL)  { verify_stack; sp++; }
+        else if (i == OR)   { verify_stku; sp++; }
+        else if (i == XOR)  { verify_stku; sp++; }
+        else if (i == AND)  { verify_stku; sp++; }
+        else if (i == EQ)   { verify_stku; sp++; }
+        else if (i == NE)   { verify_stku; sp++; }
+        else if (i == LTU)  { verify_stku; sp++; }
+        else if (i == LTS)  { verify_stku; sp++; }
+        else if (i == GTU)  { verify_stku; sp++; }
+        else if (i == GTS)  { verify_stku; sp++; }
+        else if (i == LEU)  { verify_stku; sp++; }
+        else if (i == LES)  { verify_stku; sp++; }
+        else if (i == GEU)  { verify_stku; sp++; }
+        else if (i == GES)  { verify_stku; sp++; }
+        else if (i == SHL)  { verify_stku; sp++; }
+        else if (i == SHRU) { verify_stku; sp++; }
+        else if (i == SHRS) { verify_stku; sp++; }
+        else if (i == ADD)  { verify_stku; sp++; }
+        else if (i == SUB)  { verify_stku; sp++; }
+        else if (i == MUL)  { verify_stku; sp++; }
 
         else if (i == SYSC) {
-            // TODO: syscall
+            // syscall:
+            verify_pc(0);
+            uint8_t x = *pc++;
+
+            // verify the syscall number is in range:
+            if (x >= sm->syscalls_count) {
+                sh->verify_status = INVALID_SYSCALL_NUMBER;
+                return;
+            }
+
+            // verify the syscall call function is provided:
+            struct trex_syscall *s = sm->syscalls + x;
+            if (!s->call) {
+                sh->verify_status = INVALID_SYSCALL_UNMAPPED;
+                return;
+            }
+
+            // verify we can pop args:
+            for (int n = 0; n < s->args; n++) {
+                verify_stku;
+                sp++;
+            }
+            // verify we can push returns:
+            for (int n = 0; n < s->returns; n++) {
+                --sp;
+                verify_stko;
+            }
         } else if (i == RET) {
             if (sp != sm->stack_max) {
                 // stack must be empty on return:
@@ -231,7 +272,8 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
 
     for (int n = cycles - 1; n >= 0; n--) {
         if (pc >= pc_end) {
-            goto handle_return;
+            sm->exec_status = READY;
+            break;
         }
 
         uint8_t i = *pc++;
@@ -271,21 +313,35 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
         else if (i == MUL)  a = *sp++ *  a;
 
         else if (i == SYSC) {
-            // TODO: syscall
+            uint8_t x = *pc++;
+            struct trex_syscall *s = sm->syscalls + x;
+
+            // switch to IN_SYSCALL status so we can verify push/pop calls:
+            sm->exec_status = IN_SYSCALL;
+            sm->expected_pops = s->args;
+            sm->expected_push = s->returns;
+
+            s->call(sm);
+
+            // if we didn't error out, return to EXECUTING status:
+            if (sm->exec_status == IN_SYSCALL) {
+                if (sm->expected_pops != 0) {
+                    sm->exec_status = ERRORED;
+                } else if (sm->expected_push != 0) {
+                    sm->exec_status = ERRORED;
+                } else {
+                    sm->exec_status = EXECUTING;
+                }
+            }
         } else if (i == RET) {
-            goto handle_return;
+            sm->exec_status = READY;
+            break;
         } else {
             // TODO: unknown opcode
             break;
         }
     }
-    goto done;
 
-handle_return:
-    sm->exec_status = READY;
-    // fall through
-
-done:
     sm->a = a;
     sm->pc = pc;
     sm->sp = sp;
