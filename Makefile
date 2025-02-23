@@ -1,8 +1,11 @@
+CFLAGS=-g
+CXXFLAGS=-g
+
 tests: trex_tests.o trex.o
-	$(CXX) trex_tests.o trex.o && ./a.out
+	$(CXX) $(CXXFLAGS) trex_tests.o trex.o && ./a.out
 
 trex.o: trex.c trex.h trex_opcodes.h
-	$(CC) -c trex.c
+	$(CC) $(CFLAGS) -c trex.c
 
 trex_tests.o: trex_tests.cpp trex.h trex_opcodes.h
-	$(CXX) -std=c++20 -c trex_tests.cpp
+	$(CXX) $(CXXFLAGS) -std=c++20 -c trex_tests.cpp
