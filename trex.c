@@ -94,8 +94,13 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
         else if (i == BZ                                        // branch forward if A zero
               || i == BNZ) {                                    // branch forward if A not zero
             verify_pc(0);
+            uint8_t *targetpc = (pc + *pc) + 1;
+            if (targetpc >= sh->pc_end+1) {
+                sh->verify_status = INVALID_BRANCH_TARGET;
+                goto invalid;
+            }
             // record branch destination PC for verification:
-            pcva[pcv++] = (pc + *pc) + 1;
+            pcva[pcv++] = targetpc;
             if (pcv > pcva_size) {
                 // not really invalid, just too many branches in flight for this tiny verifier to handle.
                 sh->verify_status = INVALID_BRANCH_TARGET;
