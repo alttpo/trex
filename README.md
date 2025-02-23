@@ -111,7 +111,7 @@ Example interactive Trex session:
         ; write this 65816 asm to fxpak's NMI handler:
         ; 2C00   9C 00 2C   STZ   $2C00
         ; 2C03   6C EA FF   JMP   ($FFEA)
-        (chip-write-big-endian-dword 002C6CEA)
+        (chip-write-dword 002C6CEA)
         (chip-write-advance-byte     FF)
         ; move to next state:
         (set-state 1)
@@ -139,17 +139,17 @@ Example interactive Trex session:
     (state 2)
     (burst 8) ; execute this state up to 8 times consecutively
     (handler
-        ; load into A register
         (chip-read-no-advance-byte)
+        (pop)
         (bz nmi)    ; branch if A is zero to "nmi" label
         (return)    ; else return
     (label nmi)
         ; NMI has fired! read 4 bytes from WRAM at $0010:
         (chip-use wram)
         (chip-address-set 10)
-        (chip-read-little-endian-dword) ; into A
+        (chip-read-dword)
         ; append that data to a message and send it:
-        (message-append-little-endian-dword)
+        (message-append-dword)
         (message-send)
         ; set-state to 1 and return:
         (set-state 1)
