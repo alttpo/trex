@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-
 enum exec_status {
     READY,
     EXECUTING,
@@ -50,9 +49,9 @@ struct trex_sm {
 
 // state handler:
 struct trex_sh {
-    // where program code starts:
+    // points to where program code starts:
     uint8_t *pc_start;
-    // where program code ends: (points to last instruction)
+    // points to one past last program byte:
     uint8_t *pc_end;
 
     // verification status:
@@ -61,4 +60,4 @@ struct trex_sh {
 };
 
 void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh);
-void trex_exec_sm(struct trex_sm* sm, int cycles);
+void trex_sm_exec(struct trex_sm* sm, int cycles);

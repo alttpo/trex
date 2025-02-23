@@ -2,15 +2,7 @@
 #include <stdbool.h>
 
 #include "trex.h"
-
-// opcodes for state handler:
-enum {
-    RET,
-    IMM8,IMM16,IMM24,IMM32,PSH,POP,BZ,BNZ,LDLOC,STLOC,SETST,
-    OR,XOR,AND,EQ,NE,LTU,LTS,GTU,GTS,LEU,LES,GEU,GES,
-    SHL,SHRU,SHRS,ADD,SUB,MUL,
-    SYSC
-};
+#include "trex_opcodes.h"
 
 static inline uint32_t ld16(uint8_t **p) {
     uint32_t a = *(*p)++;
@@ -49,12 +41,12 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
     uint8_t     *pcva[pcva_size];   // theoretical max of 128 branches
     int         pcv = 0;            // where the next PC to verify is inserted
 
-#define verify_pc(n) if (pc+(n) > sh->pc_end) { sh->verify_status = INVALID_OPCODE_INCOMPLETE; goto invalid; }
-#define verify_stack if (sp < sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW; goto invalid; } \
-                else if (sp >= sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW; goto invalid; }
+#define verify_pc(n) if (pc+(n) >= sh->pc_end) { sh->verify_status = INVALID_OPCODE_INCOMPLETE; goto invalid; }
+#define verify_stack if (sp <   sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW;    goto invalid; } \
+                else if (sp >=  sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW;   goto invalid; }
 
     sh->verify_status = UNVERIFIED;
-    while (pc <= sh->pc_end) {
+    while (pc < sh->pc_end) {
         // verify the current branch-target PC:
         if (pcv > 0) {
             if (pcva[0] < pc) {
@@ -177,7 +169,7 @@ invalid:
 // execute cycles on the current state handler; this relies on the handler being verified such
 // that no stack access is out of bounds and no local access is out of bounds and no PC access
 // is out of bounds.
-void trex_exec_sm(struct trex_sm* sm, int cycles) {
+void trex_sm_exec(struct trex_sm* sm, int cycles) {
     struct trex_sh  *sh;
 
     if (sm->exec_status == READY) {
@@ -196,7 +188,7 @@ void trex_exec_sm(struct trex_sm* sm, int cycles) {
     }
 
     // make sure the state handler has been verified and is valid:
-    if (!sh->verify_status != VERIFIED) {
+    if (sh->verify_status != VERIFIED) {
         // TODO: set error
         return;
     }
@@ -207,7 +199,7 @@ void trex_exec_sm(struct trex_sm* sm, int cycles) {
     uint32_t        a = sm->a;
 
     for (int n = cycles - 1; n >= 0; n--) {
-        if (pc > pc_end) {
+        if (pc >= pc_end) {
             goto handle_return;
         }
 
