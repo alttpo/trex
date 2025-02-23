@@ -10,6 +10,24 @@ enum {
     SYSC
 };
 
+enum exec_status {
+    READY,
+    EXECUTING,
+};
+
+enum verify_status {
+    UNVERIFIED,
+    VERIFIED,
+    INVALID_OPCODE,
+    INVALID_STACK_OVERFLOW,
+    INVALID_STACK_UNDERFLOW,
+    INVALID_OPCODE_INCOMPLETE,
+    INVALID_BRANCH_TARGET,
+    INVALID_LOCAL,
+    INVALID_STATE,
+    INVALID_STACK_MUST_BE_EMPTY_ON_RETURN,
+};
+
 struct trex_sh;
 
 // state machine:
@@ -25,6 +43,7 @@ struct trex_sm {
     //// }
 
     //// { mutable properties of state machine:
+    enum exec_status exec_status;
     // current state:
     uint16_t    st;
     // next state:
@@ -44,9 +63,9 @@ struct trex_sh {
     // where program code ends: (points to last instruction)
     uint8_t *pc_end;
 
-    bool    verified; // verifier was run
-    bool    valid;    // handler was determined to be valid
-    uint8_t *invalid_pc; // first PC where invalidation occurred
+    // verification status:
+    enum verify_status verify_status;
+    uint8_t *invalid_pc; // PC where invalidation occurred
 };
 
 static inline uint32_t ld16(uint8_t **p) {
@@ -86,14 +105,17 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
     uint8_t     *pcva[pcva_size];   // theoretical max of 128 branches
     int         pcv = 0;            // where the next PC to verify is inserted
 
-#define verify_pc(n) if (pc+(n) > sh->pc_end) { goto invalid; }
-#define verify_stack if (sp < sm->stack_min || sp >= sm->stack_max) { goto invalid; }
+#define verify_pc(n) if (pc+(n) > sh->pc_end) { sh->verify_status = INVALID_OPCODE_INCOMPLETE; goto invalid; }
+#define verify_stack if (sp < sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW; goto invalid; } \
+                else if (sp >= sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW; goto invalid; }
 
+    sh->verify_status = UNVERIFIED;
     while (pc <= sh->pc_end) {
         // verify the current branch-target PC:
         if (pcv > 0) {
             if (pcva[0] < pc) {
                 // did we pass this PC already? it must be inside an opcode:
+                sh->verify_status = INVALID_BRANCH_TARGET;
                 goto invalid;
             } else if (pcva[0] == pc) {
                 // this PC is valid; strike it from the list:
@@ -140,6 +162,7 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
             pcva[pcv++] = (pc + *pc) + 1;
             if (pcv > pcva_size) {
                 // not really invalid, just too many branches in flight for this tiny verifier to handle.
+                sh->verify_status = INVALID_BRANCH_TARGET;
                 goto invalid;
             }
             pc++;
@@ -148,12 +171,14 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
               || i == STLOC) {                                  // store to local
             verify_pc(0);
             if (*pc++ >= sm->locals_count) {
+                sh->verify_status = INVALID_LOCAL;
                 goto invalid;
             }
         }
         else if (i == SETST) {                                  // set-state
             verify_pc(1);
             if (ld16(&pc) >= sm->handlers_count) {
+                sh->verify_status = INVALID_STATE;
                 goto invalid;
             }
         }
@@ -183,11 +208,13 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
             // TODO: syscall
         } else if (i == RET) {
             if (sp != sm->stack_max) {
-                // stack must be empty on return
+                // stack must be empty on return:
+                sh->verify_status = INVALID_STACK_MUST_BE_EMPTY_ON_RETURN;
                 goto invalid;
             }
         } else {
-            // TODO: unknown opcode
+            // unknown opcode:
+            sh->verify_status = INVALID_OPCODE;
             goto invalid;
         }
     }
@@ -195,14 +222,11 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
 #undef verify_stack
 #undef verify_pc
 
-    sh->verified = true;
-    sh->valid = true;
+    sh->verify_status = VERIFIED;
     sh->invalid_pc = 0;
     return;
 
 invalid:
-    sh->verified = true;
-    sh->valid = false;
     sh->invalid_pc = pc;
 }
 
@@ -210,15 +234,36 @@ invalid:
 // that no stack access is out of bounds and no local access is out of bounds and no PC access
 // is out of bounds.
 void trex_exec_sm(struct trex_sm* sm, int cycles) {
-    struct trex_sh  *sh = sm->handlers + sm->st;
+    struct trex_sh  *sh;
+
+    if (sm->exec_status == READY) {
+        // move to next state:
+        sm->exec_status = EXECUTING;
+        sm->st = sm->nxst;
+        sh = sm->handlers + sm->st;
+
+        // reset registers:
+        sm->pc = sh->pc_start;
+        sm->sp = sm->stack_max;
+        sm->a = 0;
+    } else {
+        // EXECUTING status:
+        sh = sm->handlers + sm->st;
+    }
+
+    // make sure the state handler has been verified and is valid:
+    if (!sh->verify_status != VERIFIED) {
+        // TODO: set error
+        return;
+    }
+
     uint8_t         *pc = sm->pc;
     uint32_t        *sp = sm->sp;
     uint32_t        a = sm->a;
 
     for (int n = cycles - 1; n >= 0; n--) {
         if (pc > sh->pc_end) {
-            // TODO: return
-            break;
+            goto handle_return;
         }
 
         uint8_t i = *pc++;
@@ -260,14 +305,19 @@ void trex_exec_sm(struct trex_sm* sm, int cycles) {
         else if (i == SYSC) {
             // TODO: syscall
         } else if (i == RET) {
-            // TODO: return
-            break;
+            goto handle_return;
         } else {
             // TODO: unknown opcode
             break;
         }
     }
+    goto done;
 
+handle_return:
+    sm->exec_status = READY;
+    // fall through
+
+done:
     sm->a = a;
     sm->pc = pc;
     sm->sp = sp;
