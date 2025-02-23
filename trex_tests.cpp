@@ -228,6 +228,7 @@ int main() {
         }
     }
 
+    // insert some junk into WRAM to see if the program can read it:
     chips[0].mem[0x10] = 0x14;
     chips[0].mem[0x11] = 0x01;
     chips[0].mem[0x12] = 0x2B;
@@ -249,11 +250,13 @@ int main() {
 
     // verify results:
     for (int i = 0; i < 2; i++) {
-        for (int j = 0; j < 16; j++) {
+        std::cout << "chip " << i << std::endl;
+        for (int j = 0; j < 32; j++) {
             std::cout << std::setw(2) << std::setfill('0') << std::hex << (int)chips[i].mem[j] << " ";
         }
         std::cout << std::endl;
     }
+
     std::cout << "locals:" << std::endl;
     for (int i = 0; i < 16; i++) {
         std::cout << std::setw(8) << std::setfill('0') << std::hex << locals[i] << " ";
