@@ -1,3 +1,4 @@
+#pragma once
 
 // opcodes for state handler:
 enum {
