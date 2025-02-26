@@ -5,34 +5,64 @@
 #include "trex_opcodes.h"
 #include "trex_impl.h"
 
+// insertion sort into two arrays using a1 as the main
+int insert_sorted(uint8_t* a1[], uint8_t* a2[], int n, int cap, uint8_t* e1, uint8_t* e2) {
+    int i, j;
+
+    // find the correct position for the new element:
+    for (i = n - 1; i >= 0; i--) {
+        // don't insert duplicates:
+        if (a1[i] == e1) return n;
+        // found the insertion spot:
+        if (a1[i] < e1) break;
+    }
+
+    // no space left for insert?
+    if (n >= cap) {
+        return -1;
+    }
+
+    // shift elements to the right:
+    for (j = n - 1; j > i; j--) {
+        a1[j + 1] = a1[j];
+        a2[j + 1] = a2[j];
+    }
+
+    // insert the new element at the found position:
+    a1[i + 1] = e1;
+    a2[i + 1] = e2;
+
+    // return new size:
+    return n + 1;
+}
+
 void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
     uint8_t     *pc = sh->pc_start;
 
-    // track list of branch-target PCs to verify must be pointed at opcodes
-#define pcva_size 256
-    uint8_t     *pcva[pcva_size];
-    uint8_t     *pcfr[pcva_size];
-    int         pcv = 0;            // where the next PC to verify is inserted
+    // sorted list of branch-target PCs to verify must be pointed at opcodes
+#define vcap 256
+    uint8_t     *vto[vcap];
+    uint8_t     *vfr[vcap];
+    int         vn = 0; // size of the list
 
 #define verify_pc(n) if (pc+(n) >= sh->pc_end) { sh->verify_status = INVALID_OPCODE_INCOMPLETE; return; }
 
     while (pc < sh->pc_end) {
         // verify the current branch-target PC:
-        while (pcv > 0) {
-            // TODO: it is not guaranteed that PCs are inserted in ascending order!
-            if (pcva[0] < pc) {
+        while (vn > 0) {
+            if (vto[0] < pc) {
                 // did we pass this PC already? it must be inside an opcode:
                 sh->verify_status = INVALID_BRANCH_TARGET;
-                sh->invalid_target_pc = pcva[0];
-                sh->invalid_pc = pcfr[0];
+                sh->invalid_target_pc = vto[0];
+                sh->invalid_pc = vfr[0];
                 return;
-            } else if (pcva[0] == pc) {
+            } else if (vto[0] == pc) {
                 // this PC is valid; strike it from the list:
-                for (int n = 1; n < pcv; n++) {
-                    pcva[n-1] = pcva[n];
-                    pcfr[n-1] = pcfr[n];
+                for (int n = 1; n < vn; n++) {
+                    vto[n-1] = vto[n];
+                    vfr[n-1] = vfr[n];
                 }
-                pcv--;
+                vn--;
             } else {
                 // this PC is ahead of us; ignore it for now
                 break;
@@ -71,25 +101,22 @@ void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
               || i == BNZ) {                                    // branch forward if A not zero
             verify_pc(0);
             uint8_t *targetpc = (pc + *pc) + 1;
+            // target out of range?
             if (targetpc >= sh->pc_end+1) {
                 sh->verify_status = INVALID_BRANCH_TARGET;
                 sh->invalid_target_pc = targetpc;
                 return;
             }
 
-            // only record distinct targetpcs:
-            if (pcva[pcv] != targetpc) {
-                // record branch destination PC for verification:
-                pcfr[pcv] = sh->invalid_pc;
-                pcva[pcv] = targetpc;
-                pcv++;
-                if (pcv >= pcva_size) {
-                    // not really invalid, just too many branches in flight for this tiny verifier to handle.
-                    sh->verify_status = INVALID_BRANCH_TARGET;
-                    sh->invalid_target_pc = targetpc;
-                    return;
-                }
+            // record branch target PC for verification but only record distinct target PCs:
+            int new_vn = insert_sorted(vto, vfr, vn, vcap, targetpc, sh->invalid_pc);
+            if (new_vn < 0) {
+                // not really invalid, just too many branches in flight for this tiny verifier to handle.
+                sh->verify_status = INVALID_TOO_MANY_BRANCHES;
+                sh->invalid_target_pc = targetpc;
+                return;
             }
+            vn = new_vn;
             pc++;
         }
         else if (i == LDLOC                                     // load from local
@@ -166,11 +193,11 @@ void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
     }
 
     // validate remaining branch targets:
-    for (int n = 0; n < pcv; n++) {
-        if (pcva[n] != pc) {
+    for (int n = 0; n < vn; n++) {
+        if (vto[n] != pc) {
             sh->verify_status = INVALID_BRANCH_TARGET;
-            sh->invalid_pc = pcfr[n];
-            sh->invalid_target_pc = pcva[n];
+            sh->invalid_pc = vfr[n];
+            sh->invalid_target_pc = vto[n];
             return;
         }
     }

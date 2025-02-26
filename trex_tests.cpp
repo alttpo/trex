@@ -18,6 +18,7 @@ constexpr std::array verify_status_names = {
     std::string_view{"INVALID_STACK_UNDERFLOW"},
     std::string_view{"INVALID_STACK_MUST_BE_EMPTY_ON_RETURN"},
     std::string_view{"INVALID_BRANCH_TARGET"},
+    std::string_view{"INVALID_TOO_MANY_BRANCHES"},
     std::string_view{"INVALID_LOCAL"},
     std::string_view{"INVALID_STATE"},
     std::string_view{"INVALID_SYSCALL_NUMBER"},
@@ -441,6 +442,39 @@ int test_branch_verify(struct trex_sm &sm) {
     sh[0].pc_start = p1;
     sh[0].pc_end = p1 + sizeof(p1);
     std::cout << sizeof(p1) << std::endl;
+
+    if (!verify_sh(sm, sh[0])) {
+        return 1;
+    }
+
+    // verify that overlapping branches out of order is ok:
+    uint8_t p2[] = {
+        BNZ, 0x20,
+        BZ,  0x0E,
+        BNZ, 0x10,
+        BZ,  0x1A,
+        BNZ, 0x18,
+        BZ,  0x16,
+        BNZ, 0x14,
+        BZ,  0x12,
+        BNZ, 0x08,
+        BZ,  0x0E,
+        BNZ, 0x0C,
+        BZ,  0x0A,
+        BNZ, 0x0A,
+        BZ,  0x06,
+        BNZ, 0x04,
+        BZ,  0x02,
+        RET,
+        RET,
+        RET,
+        RET,
+        RET,
+    };
+
+    sh[0].pc_start = p2;
+    sh[0].pc_end = p2 + sizeof(p2);
+    std::cout << sizeof(p2) << std::endl;
 
     if (!verify_sh(sm, sh[0])) {
         return 1;
