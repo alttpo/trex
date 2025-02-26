@@ -72,6 +72,9 @@ struct trex_sh {
     // verification status:
     enum verify_status verify_status;
     uint8_t *invalid_pc; // PC where invalidation occurred
+    uint32_t branch_paths; // count of distinct branching paths
+    uint32_t max_depth;
+    uint32_t depth;
 };
 
 // syscall descriptor:
@@ -85,9 +88,9 @@ struct trex_syscall {
 
 
 // verify a state handler routine:
-void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh);
+void trex_sh_verify(struct trex_sm *sm, struct trex_sh *sh);
 // execute the state machine for a specified number of cycles:
-void trex_sm_exec(struct trex_sm* sm, int cycles);
+void trex_sm_exec(struct trex_sm *sm, int cycles);
 
 
 // for syscall usage; push a value onto the stack:

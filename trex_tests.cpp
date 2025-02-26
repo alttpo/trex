@@ -103,23 +103,24 @@ struct trex_syscall syscalls[] = {
     },
 };
 
-int main() {
-    struct trex_sm sm;
+bool verify_sh(struct trex_sm &sm, struct trex_sh &sh) {
+    trex_sh_verify(&sm, &sh);
+
+    std::cout << "verify_status = " << sh.verify_status
+        << " (" << verify_status_names[sh.verify_status] << ")"
+        << std::endl;
+    std::cout << "  branch_paths = " << sh.branch_paths << std::endl;
+    std::cout << "  max_depth    = " << sh.max_depth << std::endl;
+    if (sh.verify_status > VERIFIED) {
+        std::cout << "  at pc = " << (sh.invalid_pc - sh.pc_start) << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+int test_readme_program(struct trex_sm &sm) {
     struct trex_sh sh[3];
-
-    uint32_t stack[4] = {0};
-    uint32_t locals[16] = {0};
-
-    sm.st = 0;
-    sm.nxst = 0;
-    sm.exec_status = READY;
-
-    sm.stack_min = stack;
-    sm.stack_max = stack + sizeof(stack)/sizeof(uint32_t);
-    sm.locals = locals;
-    sm.locals_count = 16;
-    sm.syscalls = syscalls;
-    sm.syscalls_count = sizeof(syscalls)/sizeof(struct trex_syscall);
 
     sm.handlers = sh;
     sm.handlers_count = 3;
@@ -217,14 +218,8 @@ int main() {
 
     // verify the handler programs:
     for (int i = 0; i < sm.handlers_count; i++) {
-        trex_sh_verify(&sm, sh + i);
-
-        std::cout << "verify_status = " << sh[i].verify_status
-            << " (" << verify_status_names[sh[i].verify_status] << ")"
-            << std::endl;
-        if (sh[i].verify_status > VERIFIED) {
-            std::cout << "  at pc = " << (sh[i].invalid_pc - sh[i].pc_start) << std::endl;
-            return 0;
+        if (!verify_sh(sm, sh[i])) {
+            return 1;
         }
     }
 
@@ -259,9 +254,73 @@ int main() {
 
     std::cout << "locals:" << std::endl;
     for (int i = 0; i < 16; i++) {
-        std::cout << std::setw(8) << std::setfill('0') << std::hex << locals[i] << " ";
+        std::cout << std::setw(8) << std::setfill('0') << std::hex << sm.locals[i] << " ";
     }
     std::cout << std::endl;
+
+    return 0;
+}
+
+int test_branch_verify(struct trex_sm &sm) {
+    struct trex_sh sh[1];
+
+    std::cout << "branch verify:" << std::endl;
+
+    sm.handlers = sh;
+    sm.handlers_count = 1;
+
+    uint8_t p[] = {
+        IMM8, 0,
+        BZ, 2,
+        BZ, 2,
+        BNZ, 2,
+        BZ, 2,
+        BZ, 2,
+        BNZ, 2,
+        BZ, 2,
+        BZ, 2,
+        BNZ, 2,
+        BZ, 2,
+        BZ, 2,
+        BNZ, 2,
+        BZ, 2,
+        BZ, 2,
+        BNZ, 2,
+        BZ, 2,
+        RET,
+        RET,
+    };
+
+    sh[0].pc_start = p;
+    sh[0].pc_end = p + sizeof(p);
+
+    if (!verify_sh(sm, sh[0])) {
+        return 1;
+    }
+
+    return 0;
+}
+
+int main() {
+    struct trex_sm sm;
+
+    uint32_t stack[16] = {0};
+    uint32_t locals[16] = {0};
+
+    sm.st = 0;
+    sm.nxst = 0;
+    sm.exec_status = READY;
+
+    sm.stack_min = stack;
+    sm.stack_max = stack + sizeof(stack)/sizeof(uint32_t);
+    sm.locals = locals;
+    sm.locals_count = 16;
+    sm.syscalls = syscalls;
+    sm.syscalls_count = sizeof(syscalls)/sizeof(struct trex_syscall);
+
+    test_branch_verify(sm);
+
+//    test_readme_program(sm);
 
     return 0;
 }

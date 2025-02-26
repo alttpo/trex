@@ -5,13 +5,7 @@
 #include "trex_opcodes.h"
 #include "trex_impl.h"
 
-// verifies that:
-// * no PC access is out of bounds
-// * no stack access is out of bounds
-// * no local access is out of bounds
-// * stack is empty on return
-// * all branches point to opcode start
-void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
+void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
     uint8_t     *pc = sh->pc_start;
     uint32_t    *sp = sm->stack_max;
 
@@ -24,7 +18,6 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
 #define verify_stko  if (sp <   sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW;    return; }
 #define verify_stku  if (sp >=  sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW;   return; }
 
-    sh->verify_status = UNVERIFIED;
     while (pc < sh->pc_end) {
         // verify the current branch-target PC:
         if (pcv > 0) {
@@ -188,16 +181,199 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
         }
     }
 
+#undef verify_stku
+#undef verify_stko
+#undef verify_pc
+}
+
+void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, uint8_t *pc, uint32_t *sp, uint32_t a, uint32_t aknown) {
+    // a = 0 if the "A zero" branch was taken to get here, 1 if the "A not zero" branch was taken
+
+#define verify_stko  if (sp <   sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW;    return; }
+#define verify_stku  if (sp >=  sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW;   return; }
+
+    sh->branch_paths++;
+    if (++sh->depth > sh->max_depth) { sh->max_depth = sh->depth; }
+
+    while (pc < sh->pc_end) {
+        sh->invalid_pc = pc;
+
+        // load opcode:
+        uint8_t i = *pc++;
+
+        // PC and stack ops:
+        if      (i == IMM8)  {                                  // load immediate u8
+            a = *pc++;
+            aknown = 1;
+        }
+        else if (i == IMM16) {                                  // load immediate u16
+            a = ld16(&pc);
+            aknown = 1;
+        }
+        else if (i == IMM24) {                                  // load immediate u24
+            a = ld24(&pc);
+            aknown = 1;
+        }
+        else if (i == IMM32) {                                  // load immediate u32
+            a = ld32(&pc);
+            aknown = 1;
+        }
+        else if (i == PSH) {                                    // push
+            --sp;
+            verify_stko;
+        }
+        else if (i == POP) {                                    // pop
+            verify_stku;
+            sp++;
+            // we do not track stack values so we must consider A unknown:
+            aknown = 0;
+        }
+        else if (i == BZ) {                                     // branch forward if A zero
+            uint8_t offs = *pc;
+            if (offs == 0) {
+                // no branching is to be done, just move to the next PC:
+                pc++;
+            } else {
+                // find the target PC of the "A is zero" branch:
+                uint8_t *targetpc = (pc + offs) + 1;
+                if (aknown) {
+                    // A is a known value:
+                    pc = a ? pc + 1 : targetpc;
+                } else {
+                    // split off to verify the "A known to be zero" branch path:
+                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, 0, 1);
+                    if (sh->verify_status != UNVERIFIED) {
+                        // any error means we do not need to continue:
+                        return;
+                    }
+
+                    // continue verifying the "A known to be NOT zero" branch:
+                    a = 1;
+                    aknown = 1;
+                    pc++;
+                }
+            }
+        }
+        else if (i == BNZ) {                                    // branch forward if A not zero
+            uint8_t offs = *pc;
+            if (offs == 0) {
+                // no branching is to be done, just move to the next PC:
+                pc++;
+            } else {
+                // find the target PC of the "A is zero" branch:
+                uint8_t *targetpc = (pc + offs) + 1;
+                if (aknown) {
+                    // A is a known value:
+                    pc = a ? targetpc : pc + 1;
+                } else {
+                    // split off to verify the "A known to be NON zero" branch path:
+                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, 1, 1);
+                    if (sh->verify_status != UNVERIFIED) {
+                        // any error means we do not need to continue:
+                        return;
+                    }
+                    // continue verifying the "A known to be zero" branch:
+                    a = 0; // we know A is zero along this branch
+                    aknown = 1;
+                    pc++;
+                }
+            }
+        } else if (i == LDLOC) {                                // load from local
+            pc++;
+            aknown = 0;
+        } else if (i == STLOC) {                                // store to local
+            pc++;
+        }
+        else if (i == SETST) {                                  // set-state
+            pc += 2;
+        }
+
+        // stack ops; we do not track stack values so we cannot predict the value of A afterwards:
+        else if (i == OR)   { verify_stku; sp++; aknown = 0; }
+        else if (i == XOR)  { verify_stku; sp++; aknown = 0; }
+        else if (i == AND)  { verify_stku; sp++; aknown = 0; }
+        else if (i == EQ)   { verify_stku; sp++; aknown = 0; }
+        else if (i == NE)   { verify_stku; sp++; aknown = 0; }
+        else if (i == LTU)  { verify_stku; sp++; aknown = 0; }
+        else if (i == LTS)  { verify_stku; sp++; aknown = 0; }
+        else if (i == GTU)  { verify_stku; sp++; aknown = 0; }
+        else if (i == GTS)  { verify_stku; sp++; aknown = 0; }
+        else if (i == LEU)  { verify_stku; sp++; aknown = 0; }
+        else if (i == LES)  { verify_stku; sp++; aknown = 0; }
+        else if (i == GEU)  { verify_stku; sp++; aknown = 0; }
+        else if (i == GES)  { verify_stku; sp++; aknown = 0; }
+        else if (i == SHL)  { verify_stku; sp++; aknown = 0; }
+        else if (i == SHRU) { verify_stku; sp++; aknown = 0; }
+        else if (i == SHRS) { verify_stku; sp++; aknown = 0; }
+        else if (i == ADD)  { verify_stku; sp++; aknown = 0; }
+        else if (i == SUB)  { verify_stku; sp++; aknown = 0; }
+        else if (i == MUL)  { verify_stku; sp++; aknown = 0; }
+
+        else if (i == SYSC) {
+            // syscall:
+            uint8_t x = *pc++;
+            struct trex_syscall *s = sm->syscalls + x;
+
+            // verify we can pop args:
+            for (int n = 0; n < s->args; n++) {
+                verify_stku;
+                sp++;
+            }
+            // verify we can push returns:
+            for (int n = 0; n < s->returns; n++) {
+                --sp;
+                verify_stko;
+            }
+            // no way to predict the return values here that go on the stack.
+        } else if (i == RET) {
+            // return stops branch path verification:
+            break;
+        } else {
+            // unknown opcode:
+            sh->verify_status = INVALID_OPCODE;
+            return;
+        }
+    }
+
+#undef verify_stku
+#undef verify_stko
+
+    --sh->depth;
+
     // stack must be empty on return:
     if (sp != sm->stack_max) {
         sh->verify_status = INVALID_STACK_MUST_BE_EMPTY_ON_RETURN;
-        sh->invalid_pc = pc;
+        return;
+    }
+}
+
+// verifies that:
+// * no PC access is out of bounds
+// * no stack access is out of bounds
+// * no local access is out of bounds
+// * stack is empty on return for all branch paths
+// * all branches point to opcode start
+void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
+    // start out unverified:
+    sh->verify_status = UNVERIFIED;
+    sh->branch_paths = 0;
+    sh->max_depth = 0;
+    sh->depth = 0;
+
+    // run pass 1 which does not follow branch paths:
+    trex_sh_verify_pass1(sm, sh);
+    if (sh->verify_status != UNVERIFIED) {
+        // any error means we do not move to pass 2:
         return;
     }
 
-#undef verify_stack
-#undef verify_pc
+    // recursively verify all branch paths to a RET instruction:
+    // start with A known to be 0.
+    trex_sh_verify_branch_path(sm, sh, sh->pc_start, sm->stack_max, 0, 1);
 
-    sh->verify_status = VERIFIED;
-    sh->invalid_pc = 0;
+    // if we didn't error out then we've verified successfully:
+    if (sh->verify_status == UNVERIFIED) {
+        sh->verify_status = VERIFIED;
+        sh->invalid_pc = 0;
+    }
 }
