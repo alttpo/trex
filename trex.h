@@ -71,8 +71,10 @@ struct trex_sh {
 
     // verification status:
     enum verify_status verify_status;
-    uint8_t *invalid_pc; // PC where invalidation occurred
-    uint32_t branch_paths; // count of distinct branching paths
+    uint8_t *invalid_pc;        // PC where invalidation occurred
+    uint8_t *invalid_target_pc; // invalid target PC
+
+    uint32_t branch_paths;      // count of distinct branching paths
     uint32_t max_depth;
     uint32_t depth;
 };
