@@ -6,7 +6,7 @@
 #include "trex_impl.h"
 
 // insertion sort into two arrays using a1 as the main
-int insert_sorted(uint8_t* a1[], uint8_t* a2[], int n, int cap, uint8_t* e1, uint8_t* e2) {
+static inline int insert_sorted(uint8_t* a1[], uint8_t* a2[], int n, int cap, uint8_t* e1, uint8_t* e2) {
     int i, j;
 
     // find the correct position for the new element:
@@ -40,13 +40,14 @@ void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
     uint8_t     *pc = sh->pc_start;
 
     // sorted list of branch-target PCs to verify must be pointed at opcodes
-#define vcap 256
+#define vcap 128
     uint8_t     *vto[vcap];
     uint8_t     *vfr[vcap];
     int         vn = 0; // size of the list
 
 #define verify_pc(n) if (pc+(n) >= sh->pc_end) { sh->verify_status = INVALID_OPCODE_INCOMPLETE; return; }
 
+    sh->max_targets = 0;
     while (pc < sh->pc_end) {
         // verify the current branch-target PC:
         while (vn > 0) {
@@ -117,6 +118,9 @@ void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
                 return;
             }
             vn = new_vn;
+            if (vn > sh->max_targets) {
+                sh->max_targets = vn;
+            }
             pc++;
         }
         else if (i == LDLOC                                     // load from local

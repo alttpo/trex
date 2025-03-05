@@ -77,6 +77,7 @@ struct trex_sh {
 
     uint32_t branch_paths;      // count of distinct branching paths
     uint32_t max_depth;
+    uint32_t max_targets;
     uint32_t depth;
 };
 
