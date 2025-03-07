@@ -32,7 +32,8 @@ struct {
 } chips[2];
 
 struct trex_syscall syscalls[] = {
-    { // 0: chip-use
+    { // 0:
+        .name = "chip-use",
         .args = 1,
         .call = [](struct trex_sm *sm){
             uint32_t a;
@@ -40,7 +41,8 @@ struct trex_syscall syscalls[] = {
             chip_curr = a;
         },
     },
-    { // 1: chip-address-set
+    { // 1:
+        .name = "chip-address-set",
         .args = 1,
         .call = [](struct trex_sm *sm){
             uint32_t a;
@@ -48,7 +50,8 @@ struct trex_syscall syscalls[] = {
             chips[chip_curr].addr = a;
         },
     },
-    { // 2: chip-read-no-advance-byte
+    { // 2:
+        .name = "chip-read-no-advance-byte",
         .returns = 1,
         .call = [](struct trex_sm *sm){
             trex_sm_push(sm,
@@ -56,7 +59,8 @@ struct trex_syscall syscalls[] = {
             );
         },
     },
-    { // 3: chip-read-advance-byte
+    { // 3:
+        .name = "chip-read-advance-byte",
         .returns = 1,
         .call = [](struct trex_sm *sm){
             trex_sm_push(sm,
@@ -64,7 +68,8 @@ struct trex_syscall syscalls[] = {
             );
         },
     },
-    { // 4: chip-read-dword
+    { // 4:
+        .name = "chip-read-dword",
         .returns = 1,
         .call = [](struct trex_sm *sm){
             uint32_t a;
@@ -75,7 +80,8 @@ struct trex_syscall syscalls[] = {
             trex_sm_push(sm, a);
         },
     },
-    { // 5: chip-write-no-advance-byte
+    { // 5:
+        .name = "chip-write-no-advance-byte",
         .args = 1,
         .call = [](struct trex_sm *sm){
             uint32_t a;
@@ -83,7 +89,8 @@ struct trex_syscall syscalls[] = {
             chips[chip_curr].mem[chips[chip_curr].addr] = a;
         },
     },
-    { // 6: chip-write-advance-byte
+    { // 6:
+        .name = "chip-write-advance-byte",
         .args = 1,
         .call = [](struct trex_sm *sm){
             uint32_t a;
@@ -91,7 +98,8 @@ struct trex_syscall syscalls[] = {
             chips[chip_curr].mem[chips[chip_curr].addr++] = a;
         },
     },
-    { // 7: chip-write-dword
+    { // 7:
+        .name = "chip-write-dword",
         .args = 1,
         .call = [](struct trex_sm *sm){
             uint32_t a;
@@ -179,7 +187,7 @@ int test_readme_program(struct trex_sm &sm) {
         SYSC, 5,
         //; move to next state:
         //(set-state 2)
-        SETST, 2,
+        SETST, 2, 0,
         //(return)
         RET,
     };
@@ -215,7 +223,7 @@ int test_readme_program(struct trex_sm &sm) {
         STLOC, 0,
         //; set-state to 1 and return:
         //(set-state 1)
-        SETST, 1,
+        SETST, 1, 0,
         //(return)
         RET,
     };
@@ -439,7 +447,6 @@ int test_branch_verify(struct trex_sm &sm) {
 
     sh[0].pc_start = p1;
     sh[0].pc_end = p1 + sizeof(p1);
-    std::cout << sizeof(p1) << std::endl;
 
     if (!verify_sh(sm, sh[0])) {
         return 1;
@@ -838,7 +845,6 @@ int test_branch_verify(struct trex_sm &sm) {
 
     sh[0].pc_start = p3;
     sh[0].pc_end = p3 + sizeof(p3);
-    std::cout << sizeof(p1) << std::endl;
 
     if (!verify_sh(sm, sh[0])) {
         return 1;
@@ -871,7 +877,6 @@ int test_branch_verify(struct trex_sm &sm) {
 
     sh[0].pc_start = p2;
     sh[0].pc_end = p2 + sizeof(p2);
-    std::cout << sizeof(p2) << std::endl;
 
     if (!verify_sh(sm, sh[0])) {
         return 1;

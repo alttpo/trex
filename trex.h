@@ -7,6 +7,7 @@ enum exec_status {
     READY,
     EXECUTING,
     IN_SYSCALL,
+    HALTED,
     ERRORED,
 };
 
@@ -83,7 +84,12 @@ struct trex_sh {
 
 // syscall descriptor:
 struct trex_syscall {
+    // name of the syscall
+    const char *name;
+
+    // how many args the syscall pops
     uint8_t  args;
+    // how many return values the syscall pushes back
     uint8_t  returns;
 
     // call must pop `args` values, do work, and push `returns` values:

@@ -36,7 +36,7 @@ static inline int insert_sorted(uint8_t* a1[], uint8_t* a2[], int n, int cap, ui
     return n + 1;
 }
 
-void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
+static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
     uint8_t     *pc = sh->pc_start;
 
     // sorted list of branch-target PCs to verify must be pointed at opcodes
@@ -182,7 +182,7 @@ void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
                 return;
             }
         } else if (i == RET) {
-
+        } else if (i == HALT) {
         } else {
             // unknown opcode:
             sh->verify_status = INVALID_OPCODE;
@@ -209,7 +209,7 @@ void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
 #undef verify_pc
 }
 
-void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, uint8_t *pc, uint32_t *sp, uint32_t a, uint32_t aknown) {
+static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, uint8_t *pc, uint32_t *sp, uint32_t a, uint32_t aknown) {
     // a = 0 if the "A zero" branch was taken to get here, 1 if the "A not zero" branch was taken
 
 #define verify_stko  if (sp <   sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW;    return; }
@@ -350,6 +350,9 @@ void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, uint8_t 
             // no way to predict the return values here that go on the stack.
         } else if (i == RET) {
             // return stops branch path verification:
+            break;
+        } else if (i == HALT) {
+            // halt stops branch path verification:
             break;
         } else {
             // unknown opcode:

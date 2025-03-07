@@ -25,7 +25,10 @@ void trex_sm_pop(struct trex_sm *sm, uint32_t *o_val) {
 // that no stack access is out of bounds and no local access is out of bounds and no PC access
 // is out of bounds.
 void trex_sm_exec(struct trex_sm* sm, int cycles) {
-    struct trex_sh  *sh;
+    const struct trex_sh  *sh;
+    if (sm->exec_status == HALTED) {
+        return;
+    }
 
     if (sm->exec_status == READY) {
         // move to next state:
@@ -42,7 +45,7 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
         sh = sm->handlers + sm->st;
     }
 
-    // don't continue if we're in an ERRORED status:
+    // don't continue if we're in HALTED or ERRORED status:
     if (sm->exec_status != EXECUTING) {
         return;
     }
@@ -127,6 +130,9 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
             }
         } else if (i == RET) {
             sm->exec_status = READY;
+            break;
+        } else if (i == HALT) {
+            sm->exec_status = HALTED;
             break;
         } else {
             // TODO: unknown opcode
