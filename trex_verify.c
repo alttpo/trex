@@ -73,7 +73,7 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
         sh->invalid_pc = pc;
 
         // load opcode:
-        uint8_t i = *pc++;
+        uint8_t i = ld8(&pc);
 
         // PC and stack ops:
         if      (i == IMM8)  {                                  // load immediate u8
@@ -130,7 +130,7 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
                 sh->verify_status = INVALID_LOCAL;
                 return;
             }
-            if (*pc++ >= sm->locals_count) {
+            if (ld8(&pc) >= sm->locals_count) {
                 sh->verify_status = INVALID_LOCAL;
                 return;
             }
@@ -166,8 +166,8 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
 
         else if (i == SYSC) {
             // syscall:
-            verify_pc(0);
-            uint8_t x = *pc++;
+            verify_pc(1);
+            uint16_t x = ld16(&pc);
 
             // verify the syscall number is in range:
             if (x >= sm->syscalls_count) {
@@ -222,11 +222,11 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
         sh->invalid_pc = pc;
 
         // load opcode:
-        uint8_t i = *pc++;
+        uint8_t i = ld8(&pc);
 
         // PC and stack ops:
         if      (i == IMM8)  {                                  // load immediate u8
-            a = *pc++;
+            a = ld8(&pc);
             aknown = 1;
         }
         else if (i == IMM16) {                                  // load immediate u16
@@ -334,7 +334,7 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
 
         else if (i == SYSC) {
             // syscall:
-            uint8_t x = *pc++;
+            uint16_t x = ld16(&pc);
             const struct trex_syscall *s = sm->syscalls + x;
 
             // verify we can pop args:

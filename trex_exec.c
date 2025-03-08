@@ -67,10 +67,10 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
             break;
         }
 
-        uint8_t i = *pc++;
+        uint8_t i = ld8(&pc);
 
         // PC and stack ops:
-        if      (i == IMM8)  a = *pc++;                         // load immediate u8
+        if      (i == IMM8)  a = ld8(&pc);                      // load immediate u8
         else if (i == IMM16) a = ld16(&pc);                     // load immediate u16
         else if (i == IMM24) a = ld24(&pc);                     // load immediate u24
         else if (i == IMM32) a = ld32(&pc);                     // load immediate u32
@@ -78,8 +78,8 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
         else if (i == POP)   a = *sp++;                         // pop
         else if (i == BZ)    pc = (a ? pc : pc + *pc) + 1;      // branch forward if A zero
         else if (i == BNZ)   pc = (a ? pc + *pc : pc) + 1;      // branch forward if A not zero
-        else if (i == LDLOC) a = sm->locals[*pc++];             // load from local
-        else if (i == STLOC) sm->locals[*pc++] = a;             // store to local
+        else if (i == LDLOC) a = sm->locals[ld8(&pc)];          // load from local
+        else if (i == STLOC) sm->locals[ld8(&pc)] = a;          // store to local
         else if (i == SETST) sm->nxst = ld16(&pc);              // set-state
 
         // stack ops:
@@ -104,7 +104,7 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
         else if (i == MUL)  a = *sp++ *  a;
 
         else if (i == SYSC) {
-            uint8_t x = *pc++;
+            uint16_t x = ld16(&pc);
             const struct trex_syscall *s = sm->syscalls + x;
 
             // switch to IN_SYSCALL status so we can verify push/pop calls:

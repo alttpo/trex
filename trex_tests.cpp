@@ -145,22 +145,22 @@ int test_readme_program(struct trex_sm &sm) {
         //(chip-use nmix)
         IMM8, 1,
         PSH,
-        SYSC, 0,
+        SYSC, 0, 0,
         //(chip-address-set 1)
         IMM8, 1,
         PSH,
-        SYSC, 1,
+        SYSC, 1, 0,
         //; write this 65816 asm to fxpak's NMI handler:
         //; 2C00   9C 00 2C   STZ   $2C00
         //; 2C03   6C EA FF   JMP   ($FFEA)
         //(chip-write-dword 002C6CEA)
         IMM32, 0x00, 0x2C, 0x6C, 0xEA,
         PSH,
-        SYSC, 7,
+        SYSC, 7, 0,
         //(chip-write-advance-byte     FF)
         IMM8, 0xFF,
         PSH,
-        SYSC, 6,
+        SYSC, 6, 0,
         //; move to next state:
         //(set-state 1)
         SETST, 1, 0,
@@ -176,15 +176,15 @@ int test_readme_program(struct trex_sm &sm) {
         //(chip-use nmix)
         IMM8, 1,
         PSH,
-        SYSC, 0,
+        SYSC, 0, 0,
         //(chip-address-set 0)
         IMM8, 0,
         PSH,
-        SYSC, 1,
+        SYSC, 1, 0,
         //(chip-write-no-advance-byte 9C)
         IMM8, 0x9C,
         PSH,
-        SYSC, 5,
+        SYSC, 5, 0,
         //; move to next state:
         //(set-state 2)
         SETST, 2, 0,
@@ -197,7 +197,7 @@ int test_readme_program(struct trex_sm &sm) {
 
     uint8_t sh2_code[] = {
         //(chip-read-no-advance-byte)
-        SYSC, 2,
+        SYSC, 2, 0,
         //(pop)
         POP,
         //(bz nmi)    ; branch if A is zero to "nmi" label
@@ -209,13 +209,13 @@ int test_readme_program(struct trex_sm &sm) {
         //(chip-use wram)
         IMM8, 0,
         PSH,
-        SYSC, 0,
+        SYSC, 0, 0,
         //(chip-address-set 10)
         IMM8, 0x10,
         PSH,
-        SYSC, 1,
+        SYSC, 1, 0,
         //(chip-read-dword)
-        SYSC, 4,
+        SYSC, 4, 0,
         //; append that data to a message and send it:
         //(message-append-dword)
         //(message-send)
@@ -901,6 +901,7 @@ int main() {
     sm.locals_count = 16;
     sm.syscalls = syscalls;
     sm.syscalls_count = sizeof(syscalls)/sizeof(struct trex_syscall);
+    std::cout << sm.syscalls_count << " syscalls registered" << std::endl;
 
     test_branch_verify(sm);
 

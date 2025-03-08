@@ -43,7 +43,7 @@ struct trex_sm {
 
     // list of syscalls:
     const struct trex_syscall *syscalls;
-    uint8_t                    syscalls_count;
+    uint16_t                   syscalls_count;
     //// }
 
     //// { mutable properties of state machine:

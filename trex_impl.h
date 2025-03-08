@@ -2,6 +2,11 @@
 
 #include <stdint.h>
 
+static inline uint32_t ld8(uint8_t **p) {
+    uint32_t a = *(*p)++;
+    return a;
+}
+
 static inline uint32_t ld16(uint8_t **p) {
     uint32_t a = *(*p)++;
     a |= (uint32_t)(*(*p)++) << 8;
