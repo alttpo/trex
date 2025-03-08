@@ -33,17 +33,17 @@ struct trex_syscall;
 // state machine:
 struct trex_sm {
     //// { readonly properties of state machine established on create:
-    uint32_t       *locals;
-    uint8_t         locals_count;
-    uint32_t       *stack_min, *stack_max;
+    uint32_t    *locals;
+    uint8_t      locals_count;
+    uint32_t    *stack_min, *stack_max;
 
     // list of state handlers:
-    struct trex_sh *handlers;
-    uint16_t        handlers_count;
+    const struct trex_sh *handlers;
+    uint16_t              handlers_count;
 
     // list of syscalls:
-    struct trex_syscall *syscalls;
-    uint8_t              syscalls_count;
+    const struct trex_syscall *syscalls;
+    uint8_t                    syscalls_count;
     //// }
 
     //// { mutable properties of state machine:

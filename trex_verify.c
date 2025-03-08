@@ -176,7 +176,7 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
             }
 
             // verify the syscall call function is provided:
-            struct trex_syscall *s = sm->syscalls + x;
+            const struct trex_syscall *s = sm->syscalls + x;
             if (!s->call) {
                 sh->verify_status = INVALID_SYSCALL_UNMAPPED;
                 return;
@@ -335,7 +335,7 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
         else if (i == SYSC) {
             // syscall:
             uint8_t x = *pc++;
-            struct trex_syscall *s = sm->syscalls + x;
+            const struct trex_syscall *s = sm->syscalls + x;
 
             // verify we can pop args:
             for (int n = 0; n < s->args; n++) {

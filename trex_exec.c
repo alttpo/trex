@@ -105,7 +105,7 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
 
         else if (i == SYSC) {
             uint8_t x = *pc++;
-            struct trex_syscall *s = sm->syscalls + x;
+            const struct trex_syscall *s = sm->syscalls + x;
 
             // switch to IN_SYSCALL status so we can verify push/pop calls:
             sm->exec_status = IN_SYSCALL;
