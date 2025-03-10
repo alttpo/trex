@@ -247,11 +247,19 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
 #undef verify_pc
 }
 
-static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, uint8_t *pc, uint32_t *sp, uint32_t a, uint32_t aknown) {
+static void trex_sh_verify_branch_path(
+    struct trex_sm *sm,
+    struct trex_sh *sh,
+    uint8_t *pc,
+    signed sp,
+    signed stack_max,
+    uint32_t a,
+    uint32_t aknown
+) {
     // a = 0 if the "A zero" branch was taken to get here, 1 if the "A not zero" branch was taken
 
-#define verify_stko  if (sp <   sm->stack_min) { sh->verify_status = INVALID_STACK_OVERFLOW;    return; }
-#define verify_stku  if (sp >=  sm->stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW;   return; }
+#define verify_stko  if (sp <   0) { sh->verify_status = INVALID_STACK_OVERFLOW;    return; }
+#define verify_stku  if (sp >=  stack_max) { sh->verify_status = INVALID_STACK_UNDERFLOW;   return; }
 
     sh->branch_paths++;
     if (++sh->depth > sh->max_depth) { sh->max_depth = sh->depth; }
@@ -346,7 +354,7 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
                     pc = a ? pc + 1 : targetpc;
                 } else {
                     // split off to verify the "A known to be zero" branch path:
-                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, 0, 1);
+                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, stack_max, 0, 1);
                     if (sh->verify_status != UNVERIFIED) {
                         // any error means we do not need to continue:
                         return;
@@ -372,7 +380,7 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
                     pc = a ? targetpc : pc + 1;
                 } else {
                     // split off to verify the "A known to be NON zero" branch path:
-                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, 1, 1);
+                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, stack_max, 1, 1);
                     if (sh->verify_status != UNVERIFIED) {
                         // any error means we do not need to continue:
                         return;
@@ -435,7 +443,7 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
     --sh->depth;
 
     // stack must be empty on return:
-    if (sp != sm->stack_max) {
+    if (sp != stack_max) {
         sh->verify_status = INVALID_STACK_MUST_BE_EMPTY_ON_RETURN;
         return;
     }
@@ -447,7 +455,7 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
 // * no local access is out of bounds
 // * stack is empty on return for all branch paths
 // * all branches point to opcode start
-void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
+void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh, signed stack_max) {
     // start out unverified:
     sh->verify_status = UNVERIFIED;
     sh->branch_paths = 0;
@@ -463,7 +471,7 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh) {
 
     // recursively verify all branch paths to a RET instruction:
     // start with A known to be 0.
-    trex_sh_verify_branch_path(sm, sh, sh->pc_start, sm->stack_max, 0, 1);
+    trex_sh_verify_branch_path(sm, sh, sh->pc_start, stack_max, stack_max, 0, 1);
 
     // if we didn't error out then we've verified successfully:
     if (sh->verify_status == UNVERIFIED) {
