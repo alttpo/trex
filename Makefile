@@ -19,4 +19,4 @@ check: trex_tests
 clean:
 	$(RM) trex_tests.o trex_exec.o trex_verify.o
 
-.PHONY: check distcheck
+.PHONY: check distcheck clean

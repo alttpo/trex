@@ -27,15 +27,15 @@ enum verify_status {
     INVALID_SYSCALL_UNMAPPED,
 };
 
+struct trex_context;
+struct trex_sm;
 struct trex_sh;
 struct trex_syscall;
 
 // state machine:
 struct trex_sm {
     //// { readonly properties of state machine established on create:
-    uint32_t    *locals;
-    uint8_t      locals_count;
-    uint32_t    *stack_min, *stack_max;
+    uint8_t      iterations; // number of iterations of state handlers to run
 
     // list of state handlers:
     const struct trex_sh *handlers;
@@ -44,6 +44,9 @@ struct trex_sm {
     // list of syscalls:
     const struct trex_syscall *syscalls;
     uint16_t                   syscalls_count;
+
+    uint32_t    *locals;
+    uint8_t      locals_count;
     //// }
 
     //// { mutable properties of state machine:
@@ -53,14 +56,6 @@ struct trex_sm {
     uint16_t    st;
     // next state number:
     uint16_t    nxst;
-
-    // current state handler execution state:
-    uint32_t    a;
-    uint8_t     *pc;
-    uint32_t    *sp;
-
-    int expected_push;
-    int expected_pops;
     //// }
 };
 
@@ -73,6 +68,7 @@ struct trex_sh {
 
     // verification status:
     enum verify_status verify_status;
+
     uint8_t *invalid_pc;        // PC where invalidation occurred
     uint8_t *invalid_target_pc; // invalid target PC
 
@@ -93,17 +89,53 @@ struct trex_syscall {
     uint8_t  returns;
 
     // call must pop `args` values, do work, and push `returns` values:
-    void (*call)(struct trex_sm *sm);
+    void (*call)(struct trex_context *ctx);
+};
+
+// trex context to contain state machines, handlers, scheduler, and syscalls
+struct trex_context {
+    // opaque pointer for the host's use:
+    void *hostdata;
+
+    // points to lowest address of the stack region:
+    uint32_t    *stack_min;
+    // points to one past the end of the stack region:
+    uint32_t    *stack_max;
+
+    // current state handler execution state:
+    unsigned curr_machine;
+    signed iterations_remaining;
+    struct trex_sm *sm;
+
+    uint32_t    a;
+    uint8_t     *pc;
+    uint32_t    *sp;
+
+    // expectations of current syscall to verify it behaves as stated:
+    int expected_push;
+    int expected_pops;
+
+    // current list of all known state machines:
+    struct trex_sm **machines;
+    unsigned         machines_count;
 };
 
 
 // verify a state handler routine:
-void trex_sh_verify(struct trex_sm *sm, struct trex_sh *sh);
-// execute the state machine for a specified number of cycles:
-void trex_sm_exec(struct trex_sm *sm, int cycles);
-
+void trex_sh_verify(struct trex_sm *sm, struct trex_sh *sh, signed stack_max);
 
 // for syscall usage; push a value onto the stack:
-void trex_sm_push(struct trex_sm *sm, uint32_t val);
+void trex_push(struct trex_context *ctx, uint32_t val);
 // for syscall usage; pop a value off the stack:
-void trex_sm_pop(struct trex_sm *sm, uint32_t *o_val);
+void trex_pop(struct trex_context *ctx, uint32_t *o_val);
+
+// initialize a context with initial values for readonly properties:
+void trex_context_init(
+    struct trex_context *ctx,
+    void *hostdata,
+    uint32_t *stack,
+    unsigned stack_size
+);
+
+// advance the scheduler to choose the next state machine, then execute the state machine for at most the specified number of cycles:
+void trex_exec(struct trex_context *ctx, int cycles);

@@ -35,26 +35,26 @@ struct trex_syscall syscalls[] = {
     { // 0:
         .name = "chip-use",
         .args = 1,
-        .call = [](struct trex_sm *sm){
+        .call = [](struct trex_context *ctx){
             uint32_t a;
-            trex_sm_pop(sm, &a);
+            trex_pop(ctx, &a);
             chip_curr = a;
         },
     },
     { // 1:
         .name = "chip-address-set",
         .args = 1,
-        .call = [](struct trex_sm *sm){
+        .call = [](struct trex_context *ctx){
             uint32_t a;
-            trex_sm_pop(sm, &a);
+            trex_pop(ctx, &a);
             chips[chip_curr].addr = a;
         },
     },
     { // 2:
         .name = "chip-read-no-advance-byte",
         .returns = 1,
-        .call = [](struct trex_sm *sm){
-            trex_sm_push(sm,
+        .call = [](struct trex_context *ctx){
+            trex_push(ctx,
                 chips[chip_curr].mem[chips[chip_curr].addr]
             );
         },
@@ -62,8 +62,8 @@ struct trex_syscall syscalls[] = {
     { // 3:
         .name = "chip-read-advance-byte",
         .returns = 1,
-        .call = [](struct trex_sm *sm){
-            trex_sm_push(sm,
+        .call = [](struct trex_context *ctx){
+            trex_push(ctx,
                 chips[chip_curr].mem[chips[chip_curr].addr++]
             );
         },
@@ -71,39 +71,39 @@ struct trex_syscall syscalls[] = {
     { // 4:
         .name = "chip-read-dword",
         .returns = 1,
-        .call = [](struct trex_sm *sm){
+        .call = [](struct trex_context *ctx){
             uint32_t a;
             a  = chips[chip_curr].mem[chips[chip_curr].addr++];
             a |= chips[chip_curr].mem[chips[chip_curr].addr++] << 8;
             a |= chips[chip_curr].mem[chips[chip_curr].addr++] << 16;
             a |= chips[chip_curr].mem[chips[chip_curr].addr++] << 24;
-            trex_sm_push(sm, a);
+            trex_push(ctx, a);
         },
     },
     { // 5:
         .name = "chip-write-no-advance-byte",
         .args = 1,
-        .call = [](struct trex_sm *sm){
+        .call = [](struct trex_context *ctx){
             uint32_t a;
-            trex_sm_pop(sm, &a);
+            trex_pop(ctx, &a);
             chips[chip_curr].mem[chips[chip_curr].addr] = a;
         },
     },
     { // 6:
         .name = "chip-write-advance-byte",
         .args = 1,
-        .call = [](struct trex_sm *sm){
+        .call = [](struct trex_context *ctx){
             uint32_t a;
-            trex_sm_pop(sm, &a);
+            trex_pop(ctx, &a);
             chips[chip_curr].mem[chips[chip_curr].addr++] = a;
         },
     },
     { // 7:
         .name = "chip-write-dword",
         .args = 1,
-        .call = [](struct trex_sm *sm){
+        .call = [](struct trex_context *ctx){
             uint32_t a;
-            trex_sm_pop(sm, &a);
+            trex_pop(ctx, &a);
             chips[chip_curr].mem[chips[chip_curr].addr++] = a;
             chips[chip_curr].mem[chips[chip_curr].addr++] = a >> 8;
             chips[chip_curr].mem[chips[chip_curr].addr++] = a >> 16;
@@ -113,7 +113,7 @@ struct trex_syscall syscalls[] = {
 };
 
 bool verify_sh(struct trex_sm &sm, struct trex_sh &sh) {
-    trex_sh_verify(&sm, &sh);
+    trex_sh_verify(&sm, &sh, 16);
 
     std::cout << "verify_status = " << sh.verify_status
         << " (" << verify_status_names[sh.verify_status] << ")"
@@ -132,8 +132,10 @@ bool verify_sh(struct trex_sm &sm, struct trex_sh &sh) {
     return true;
 }
 
-int test_readme_program(struct trex_sm &sm) {
+int test_readme_program(struct trex_context &ctx) {
     struct trex_sh sh[3];
+
+    auto &sm = *(ctx.machines[0]);
 
     std::cout << "readme:" << std::endl;
 
@@ -245,17 +247,17 @@ int test_readme_program(struct trex_sm &sm) {
     chips[0].mem[0x13] = 0xAA;
 
     // execute the state machine:
-    trex_sm_exec(&sm, 1024);
+    trex_exec(&ctx, 1024);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
-    trex_sm_exec(&sm, 1024);
+    trex_exec(&ctx, 1024);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
     // run an iteration of state 2:
-    trex_sm_exec(&sm, 1024);
+    trex_exec(&ctx, 1024);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
     // pretend NMIX ran and reset $2C00 to 00:
     chips[1].mem[0] = 0;
     // rerun state 2:
-    trex_sm_exec(&sm, 1024);
+    trex_exec(&ctx, 1024);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
 
     // verify results:
@@ -276,7 +278,9 @@ int test_readme_program(struct trex_sm &sm) {
     return 0;
 }
 
-int test_branch_verify(struct trex_sm &sm) {
+int test_branch_verify(struct trex_context &ctx) {
+    auto &sm = *(ctx.machines[0]);
+
     struct trex_sh sh[1];
 
     std::cout << "branch verify:" << std::endl;
@@ -886,26 +890,33 @@ int test_branch_verify(struct trex_sm &sm) {
 }
 
 int main() {
+    struct trex_context ctx;
     struct trex_sm sm;
+    struct trex_sm *machines[1];
 
     uint32_t stack[16] = {0};
     uint32_t locals[16] = {0};
 
+    trex_context_init(&ctx, 0, stack, 16);
+
+    ctx.machines = machines;
+    ctx.machines_count = 1;
+    ctx.machines[0] = &sm;
+
+    sm.iterations = 1;
     sm.st = 0;
     sm.nxst = 0;
     sm.exec_status = READY;
 
-    sm.stack_min = stack;
-    sm.stack_max = stack + sizeof(stack)/sizeof(uint32_t);
     sm.locals = locals;
     sm.locals_count = 16;
     sm.syscalls = syscalls;
     sm.syscalls_count = sizeof(syscalls)/sizeof(struct trex_syscall);
     std::cout << sm.syscalls_count << " syscalls registered" << std::endl;
 
-    test_branch_verify(sm);
+    test_branch_verify(ctx);
 
-    test_readme_program(sm);
+    test_readme_program(ctx);
 
     return 0;
 }
