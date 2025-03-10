@@ -143,27 +143,27 @@ int test_readme_program(struct trex_sm &sm) {
     uint8_t sh0_code[] = {
         //; we write all the asm for 2C00 handler except the first byte and then enable it with the final write to 2C00:
         //(chip-use nmix)
-        IMM8, 1,
+        IMM1, 1,
         PSH,
-        SYSC, 0, 0,
+        SYS1, 0,
         //(chip-address-set 1)
-        IMM8, 1,
+        IMM1, 1,
         PSH,
-        SYSC, 1, 0,
+        SYS1, 1,
         //; write this 65816 asm to fxpak's NMI handler:
         //; 2C00   9C 00 2C   STZ   $2C00
         //; 2C03   6C EA FF   JMP   ($FFEA)
         //(chip-write-dword 002C6CEA)
-        IMM32, 0x00, 0x2C, 0x6C, 0xEA,
+        IMM4, 0x00, 0x2C, 0x6C, 0xEA,
         PSH,
-        SYSC, 7, 0,
+        SYS1, 7,
         //(chip-write-advance-byte     FF)
-        IMM8, 0xFF,
+        IMM1, 0xFF,
         PSH,
-        SYSC, 6, 0,
+        SYS1, 6,
         //; move to next state:
         //(set-state 1)
-        SETST, 1, 0,
+        SST1, 1,
         //(return)
         RET,
     };
@@ -174,20 +174,20 @@ int test_readme_program(struct trex_sm &sm) {
     uint8_t sh1_code[] = {
         //; write the first byte of the asm routine to enable it:
         //(chip-use nmix)
-        IMM8, 1,
+        IMM1, 1,
         PSH,
-        SYSC, 0, 0,
+        SYS1, 0,
         //(chip-address-set 0)
-        IMM8, 0,
+        IMM1, 0,
         PSH,
-        SYSC, 1, 0,
+        SYS1, 1,
         //(chip-write-no-advance-byte 9C)
-        IMM8, 0x9C,
+        IMM1, 0x9C,
         PSH,
-        SYSC, 5, 0,
+        SYS1, 5,
         //; move to next state:
         //(set-state 2)
-        SETST, 2, 0,
+        SST1, 2,
         //(return)
         RET,
     };
@@ -197,7 +197,7 @@ int test_readme_program(struct trex_sm &sm) {
 
     uint8_t sh2_code[] = {
         //(chip-read-no-advance-byte)
-        SYSC, 2, 0,
+        SYS1, 2,
         //(pop)
         POP,
         //(bz nmi)    ; branch if A is zero to "nmi" label
@@ -207,23 +207,23 @@ int test_readme_program(struct trex_sm &sm) {
         //(label nmi)
         //; NMI has fired! read 4 bytes from WRAM at $0010:
         //(chip-use wram)
-        IMM8, 0,
+        IMM1, 0,
         PSH,
-        SYSC, 0, 0,
+        SYS1, 0,
         //(chip-address-set 10)
-        IMM8, 0x10,
+        IMM1, 0x10,
         PSH,
-        SYSC, 1, 0,
+        SYS1, 1,
         //(chip-read-dword)
-        SYSC, 4, 0,
+        SYS1, 4,
         //; append that data to a message and send it:
         //(message-append-dword)
         //(message-send)
         POP,
-        STLOC, 0,
+        STL1, 0,
         //; set-state to 1 and return:
         //(set-state 1)
-        SETST, 1, 0,
+        SST1, 1,
         //(return)
         RET,
     };
@@ -285,7 +285,7 @@ int test_branch_verify(struct trex_sm &sm) {
     sm.handlers_count = 1;
 
     uint8_t p0[] = {
-        IMM8, 0,
+        IMM1, 0,
         BZ, 2,
         BZ, 2,
         BNZ, 2,

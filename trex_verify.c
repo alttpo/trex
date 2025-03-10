@@ -76,27 +76,95 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
         uint8_t i = ld8(&pc);
 
         // PC and stack ops:
-        if      (i == IMM8)  {                                  // load immediate u8
+        if (i == SYS1) {
+            // syscall:
+            verify_pc(0);
+            uint16_t x = ld8(&pc);
+
+            // verify the syscall number is in range:
+            if (x >= sm->syscalls_count) {
+                sh->verify_status = INVALID_SYSCALL_NUMBER;
+                return;
+            }
+
+            // verify the syscall call function is provided:
+            const struct trex_syscall *s = sm->syscalls + x;
+            if (!s->call) {
+                sh->verify_status = INVALID_SYSCALL_UNMAPPED;
+                return;
+            }
+        }
+        else if (i == SYS2) {
+            // syscall:
+            verify_pc(1);
+            uint16_t x = ld16(&pc);
+
+            // verify the syscall number is in range:
+            if (x >= sm->syscalls_count) {
+                sh->verify_status = INVALID_SYSCALL_NUMBER;
+                return;
+            }
+
+            // verify the syscall call function is provided:
+            const struct trex_syscall *s = sm->syscalls + x;
+            if (!s->call) {
+                sh->verify_status = INVALID_SYSCALL_UNMAPPED;
+                return;
+            }
+        }
+        else if (i == IMM1)  {                                  // load immediate u8
             verify_pc(0);
             pc++;
         }
-        else if (i == IMM16) {                                  // load immediate u16
+        else if (i == IMM2) {                                  // load immediate u16
             verify_pc(1);
             pc += 2;
         }
-        else if (i == IMM24) {                                  // load immediate u24
+        else if (i == IMM3) {                                  // load immediate u24
             verify_pc(2);
             pc += 3;
         }
-        else if (i == IMM32) {                                  // load immediate u32
+        else if (i == IMM4) {                                  // load immediate u32
             verify_pc(3);
             pc += 4;
         }
-        else if (i == PSH) {                                    // push
-            // stack analysis happens in trex_sh_verify_branch_path
+        else if (i == LDL1                                     // load from local
+              || i == STL1) {                                  // store to local
+            verify_pc(0);
+            if (!sm->locals) {
+                sh->verify_status = INVALID_LOCAL;
+                return;
+            }
+            if (ld8(&pc) >= sm->locals_count) {
+                sh->verify_status = INVALID_LOCAL;
+                return;
+            }
         }
-        else if (i == POP) {                                    // pop
-            // stack analysis happens in trex_sh_verify_branch_path
+        else if (i == LDL2                                     // load from local
+              || i == STL2) {                                  // store to local
+            verify_pc(1);
+            if (!sm->locals) {
+                sh->verify_status = INVALID_LOCAL;
+                return;
+            }
+            if (ld16(&pc) >= sm->locals_count) {
+                sh->verify_status = INVALID_LOCAL;
+                return;
+            }
+        }
+        else if (i == SST1) {                                  // set-state
+            verify_pc(0);
+            if (ld8(&pc) >= sm->handlers_count) {
+                sh->verify_status = INVALID_STATE;
+                return;
+            }
+        }
+        else if (i == SST2) {                                  // set-state
+            verify_pc(1);
+            if (ld16(&pc) >= sm->handlers_count) {
+                sh->verify_status = INVALID_STATE;
+                return;
+            }
         }
         else if (i == BZ                                        // branch forward if A zero
               || i == BNZ) {                                    // branch forward if A not zero
@@ -123,24 +191,11 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
             }
             pc++;
         }
-        else if (i == LDLOC                                     // load from local
-              || i == STLOC) {                                  // store to local
-            verify_pc(0);
-            if (!sm->locals) {
-                sh->verify_status = INVALID_LOCAL;
-                return;
-            }
-            if (ld8(&pc) >= sm->locals_count) {
-                sh->verify_status = INVALID_LOCAL;
-                return;
-            }
+        else if (i == PSH) {                                    // push
+            // stack analysis happens in trex_sh_verify_branch_path
         }
-        else if (i == SETST) {                                  // set-state
-            verify_pc(1);
-            if (ld16(&pc) >= sm->handlers_count) {
-                sh->verify_status = INVALID_STATE;
-                return;
-            }
+        else if (i == POP) {                                    // pop
+            // stack analysis happens in trex_sh_verify_branch_path
         }
 
         // stack ops:
@@ -164,26 +219,9 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
         else if (i == SUB)  { }
         else if (i == MUL)  { }
 
-        else if (i == SYSC) {
-            // syscall:
-            verify_pc(1);
-            uint16_t x = ld16(&pc);
-
-            // verify the syscall number is in range:
-            if (x >= sm->syscalls_count) {
-                sh->verify_status = INVALID_SYSCALL_NUMBER;
-                return;
-            }
-
-            // verify the syscall call function is provided:
-            const struct trex_syscall *s = sm->syscalls + x;
-            if (!s->call) {
-                sh->verify_status = INVALID_SYSCALL_UNMAPPED;
-                return;
-            }
-        } else if (i == RET) {
-        } else if (i == HALT) {
-        } else {
+        else if (i == RET)  { }
+        else if (i == HALT) { }
+        else {
             // unknown opcode:
             sh->verify_status = INVALID_OPCODE;
             return;
@@ -225,31 +263,75 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
         uint8_t i = ld8(&pc);
 
         // PC and stack ops:
-        if      (i == IMM8)  {                                  // load immediate u8
+        if (i == SYS1) {
+            // syscall:
+            uint16_t x = ld8(&pc);
+            const struct trex_syscall *s = sm->syscalls + x;
+
+            // verify we can pop args:
+            for (int n = 0; n < s->args; n++) {
+                verify_stku;
+                sp++;
+            }
+            // verify we can push returns:
+            for (int n = 0; n < s->returns; n++) {
+                --sp;
+                verify_stko;
+            }
+            // no way to predict the return values here that go on the stack.
+        }
+        else if (i == SYS2) {
+            // syscall:
+            uint16_t x = ld16(&pc);
+            const struct trex_syscall *s = sm->syscalls + x;
+
+            // verify we can pop args:
+            for (int n = 0; n < s->args; n++) {
+                verify_stku;
+                sp++;
+            }
+            // verify we can push returns:
+            for (int n = 0; n < s->returns; n++) {
+                --sp;
+                verify_stko;
+            }
+            // no way to predict the return values here that go on the stack.
+        }
+        else if (i == IMM1) {                                   // load immediate u8
             a = ld8(&pc);
             aknown = 1;
         }
-        else if (i == IMM16) {                                  // load immediate u16
+        else if (i == IMM2) {                                   // load immediate u16
             a = ld16(&pc);
             aknown = 1;
         }
-        else if (i == IMM24) {                                  // load immediate u24
+        else if (i == IMM3) {                                   // load immediate u24
             a = ld24(&pc);
             aknown = 1;
         }
-        else if (i == IMM32) {                                  // load immediate u32
+        else if (i == IMM4) {                                   // load immediate u32
             a = ld32(&pc);
             aknown = 1;
         }
-        else if (i == PSH) {                                    // push
-            --sp;
-            verify_stko;
-        }
-        else if (i == POP) {                                    // pop
-            verify_stku;
-            sp++;
-            // we do not track stack values so we must consider A unknown:
+        else if (i == LDL1) {                                   // load from local
+            pc++;
             aknown = 0;
+        }
+        else if (i == LDL2) {                                   // load from local
+            pc += 2;
+            aknown = 0;
+        }
+        else if (i == STL1) {                                   // store to local
+            pc++;
+        }
+        else if (i == STL2) {                                   // store to local
+            pc += 2;
+        }
+        else if (i == SST1) {                                   // set-state
+            pc++;
+        }
+        else if (i == SST2) {                                   // set-state
+            pc += 2;
         }
         else if (i == BZ) {                                     // branch forward if A zero
             uint8_t offs = *pc;
@@ -301,14 +383,16 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
                     pc++;
                 }
             }
-        } else if (i == LDLOC) {                                // load from local
-            pc++;
-            aknown = 0;
-        } else if (i == STLOC) {                                // store to local
-            pc++;
         }
-        else if (i == SETST) {                                  // set-state
-            pc += 2;
+        else if (i == PSH) {                                    // push
+            --sp;
+            verify_stko;
+        }
+        else if (i == POP) {                                    // pop
+            verify_stku;
+            sp++;
+            // we do not track stack values so we must consider A unknown:
+            aknown = 0;
         }
 
         // stack ops; we do not track stack values so we cannot predict the value of A afterwards:
@@ -332,23 +416,7 @@ static void trex_sh_verify_branch_path(struct trex_sm *sm, struct trex_sh *sh, u
         else if (i == SUB)  { verify_stku; sp++; aknown = 0; }
         else if (i == MUL)  { verify_stku; sp++; aknown = 0; }
 
-        else if (i == SYSC) {
-            // syscall:
-            uint16_t x = ld16(&pc);
-            const struct trex_syscall *s = sm->syscalls + x;
-
-            // verify we can pop args:
-            for (int n = 0; n < s->args; n++) {
-                verify_stku;
-                sp++;
-            }
-            // verify we can push returns:
-            for (int n = 0; n < s->returns; n++) {
-                --sp;
-                verify_stko;
-            }
-            // no way to predict the return values here that go on the stack.
-        } else if (i == RET) {
+        else if (i == RET) {
             // return stops branch path verification:
             break;
         } else if (i == HALT) {

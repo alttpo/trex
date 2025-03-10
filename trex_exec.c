@@ -70,41 +70,9 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
         uint8_t i = ld8(&pc);
 
         // PC and stack ops:
-        if      (i == IMM8)  a = ld8(&pc);                      // load immediate u8
-        else if (i == IMM16) a = ld16(&pc);                     // load immediate u16
-        else if (i == IMM24) a = ld24(&pc);                     // load immediate u24
-        else if (i == IMM32) a = ld32(&pc);                     // load immediate u32
-        else if (i == PSH)   *--sp = a;                         // push
-        else if (i == POP)   a = *sp++;                         // pop
-        else if (i == BZ)    pc = (a ? pc : pc + *pc) + 1;      // branch forward if A zero
-        else if (i == BNZ)   pc = (a ? pc + *pc : pc) + 1;      // branch forward if A not zero
-        else if (i == LDLOC) a = sm->locals[ld8(&pc)];          // load from local
-        else if (i == STLOC) sm->locals[ld8(&pc)] = a;          // store to local
-        else if (i == SETST) sm->nxst = ld16(&pc);              // set-state
-
-        // stack ops:
-        else if (i == OR)   a = *sp++ |  a;
-        else if (i == XOR)  a = *sp++ ^  a;
-        else if (i == AND)  a = *sp++ &  a;
-        else if (i == EQ)   a = *sp++ == a;
-        else if (i == NE)   a = *sp++ != a;
-        else if (i == LTU)  a = *sp++ <  a;
-        else if (i == LTS)  a = (int32_t)*sp++ <  (int32_t)a;
-        else if (i == GTU)  a = *sp++ >  a;
-        else if (i == GTS)  a = (int32_t)*sp++ >  (int32_t)a;
-        else if (i == LEU)  a = *sp++ <= a;
-        else if (i == LES)  a = (int32_t)*sp++ <= (int32_t)a;
-        else if (i == GEU)  a = *sp++ >= a;
-        else if (i == GES)  a = (int32_t)*sp++ >= (int32_t)a;
-        else if (i == SHL)  a = *sp++ << a;
-        else if (i == SHRU) a = *sp++ >> a;
-        else if (i == SHRS) a = (int32_t)*sp++ >> a;
-        else if (i == ADD)  a = *sp++ +  a;
-        else if (i == SUB)  a = *sp++ -  a;
-        else if (i == MUL)  a = *sp++ *  a;
-
-        else if (i == SYSC) {
-            uint16_t x = ld16(&pc);
+        if (i == SYS1 || i == SYS2) {
+            uint16_t x;
+            x = (i == SYS2) ? ld16(&pc) : ld8(&pc);
             const struct trex_syscall *s = sm->syscalls + x;
 
             // switch to IN_SYSCALL status so we can verify push/pop calls:
@@ -128,13 +96,52 @@ void trex_sm_exec(struct trex_sm* sm, int cycles) {
                     sm->exec_status = EXECUTING;
                 }
             }
-        } else if (i == RET) {
+        }
+        else if (i == IMM1) a = ld8(&pc);                       // load immediate u8
+        else if (i == IMM2) a = ld16(&pc);                      // load immediate u16
+        else if (i == IMM3) a = ld24(&pc);                      // load immediate u24
+        else if (i == IMM4) a = ld32(&pc);                      // load immediate u32
+        else if (i == LDL1) a = sm->locals[ld8(&pc)];           // load from local
+        else if (i == LDL2) a = sm->locals[ld16(&pc)];          // load from local
+        else if (i == STL1) sm->locals[ld8(&pc)] = a;           // store to local
+        else if (i == STL2) sm->locals[ld16(&pc)] = a;          // store to local
+        else if (i == SST1) sm->nxst = ld8(&pc);                // set-state
+        else if (i == SST2) sm->nxst = ld16(&pc);               // set-state
+        else if (i == BZ)    pc = (a ? pc : pc + *pc) + 1;      // branch forward if A zero
+        else if (i == BNZ)   pc = (a ? pc + *pc : pc) + 1;      // branch forward if A not zero
+        else if (i == PSH)   *--sp = a;                         // push
+        else if (i == POP)   a = *sp++;                         // pop
+
+        // stack ops:
+        else if (i == OR)   a = *sp++ |  a;
+        else if (i == XOR)  a = *sp++ ^  a;
+        else if (i == AND)  a = *sp++ &  a;
+        else if (i == EQ)   a = *sp++ == a;
+        else if (i == NE)   a = *sp++ != a;
+        else if (i == LTU)  a = *sp++ <  a;
+        else if (i == LTS)  a = (int32_t)*sp++ <  (int32_t)a;
+        else if (i == GTU)  a = *sp++ >  a;
+        else if (i == GTS)  a = (int32_t)*sp++ >  (int32_t)a;
+        else if (i == LEU)  a = *sp++ <= a;
+        else if (i == LES)  a = (int32_t)*sp++ <= (int32_t)a;
+        else if (i == GEU)  a = *sp++ >= a;
+        else if (i == GES)  a = (int32_t)*sp++ >= (int32_t)a;
+        else if (i == SHL)  a = *sp++ << a;
+        else if (i == SHRU) a = *sp++ >> a;
+        else if (i == SHRS) a = (int32_t)*sp++ >> a;
+        else if (i == ADD)  a = *sp++ +  a;
+        else if (i == SUB)  a = *sp++ -  a;
+        else if (i == MUL)  a = *sp++ *  a;
+
+        else if (i == RET) {
             sm->exec_status = READY;
             break;
-        } else if (i == HALT) {
+        }
+        else if (i == HALT) {
             sm->exec_status = HALTED;
             break;
-        } else {
+        }
+        else {
             // TODO: unknown opcode
             break;
         }
