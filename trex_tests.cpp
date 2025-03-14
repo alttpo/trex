@@ -135,7 +135,7 @@ bool verify_sh(struct trex_sm &sm, struct trex_sh &sh) {
 int test_readme_program(struct trex_context &ctx) {
     struct trex_sh sh[3];
 
-    auto &sm = *(ctx.sm);
+    auto &sm = *(ctx.machines[0]);
 
     std::cout << "readme:" << std::endl;
 
@@ -279,7 +279,7 @@ int test_readme_program(struct trex_context &ctx) {
 }
 
 int test_branch_verify(struct trex_context &ctx) {
-    auto &sm = *(ctx.sm);
+    auto &sm = *(ctx.machines[0]);
 
     struct trex_sh sh[1];
 
@@ -892,14 +892,18 @@ int test_branch_verify(struct trex_context &ctx) {
 int main() {
     struct trex_context ctx;
     struct trex_sm sm;
+    struct trex_sm *machines[1];
 
     uint32_t stack[16] = {0};
     uint32_t locals[16] = {0};
 
-    ctx.stack_min = stack;
-    ctx.stack_max = stack + sizeof(stack)/sizeof(uint32_t);
-    ctx.sm = &sm;
+    trex_context_init(&ctx, 0, stack, 16);
 
+    ctx.machines = machines;
+    ctx.machines_count = 1;
+    ctx.machines[0] = &sm;
+
+    sm.iterations = 1;
     sm.st = 0;
     sm.nxst = 0;
     sm.exec_status = READY;

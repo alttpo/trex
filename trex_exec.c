@@ -24,15 +24,15 @@ void trex_pop(struct trex_context *ctx, uint32_t *o_val) {
 // execute cycles on the current state handler; this relies on the handler being verified such
 // that no stack access is out of bounds and no local access is out of bounds and no PC access
 // is out of bounds.
-void trex_exec(struct trex_context *ctx, int cycles) {
+int trex_sm_exec(struct trex_context *ctx, int cycles) {
     const struct trex_sh  *sh;
     struct trex_sm *sm = ctx->sm;
     if (!sm) {
-        return;
+        return cycles;
     }
 
-    if (ctx->sm->exec_status == HALTED) {
-        return;
+    if (sm->exec_status == HALTED) {
+        return cycles;
     }
 
     if (sm->exec_status == READY) {
@@ -52,13 +52,13 @@ void trex_exec(struct trex_context *ctx, int cycles) {
 
     // don't continue if we're in HALTED or ERRORED status:
     if (sm->exec_status != EXECUTING) {
-        return;
+        return cycles;
     }
 
     // make sure the state handler has been verified:
     if (sh->verify_status != VERIFIED) {
         // TODO: set error
-        return;
+        return cycles;
     }
 
     uint8_t         *pc = ctx->pc;
@@ -66,12 +66,13 @@ void trex_exec(struct trex_context *ctx, int cycles) {
     uint32_t        *sp = ctx->sp;
     uint32_t        a = ctx->a;
 
-    for (int n = cycles - 1; n >= 0; n--) {
+    while (cycles > 0) {
         if (pc >= pc_end) {
             sm->exec_status = READY;
             break;
         }
 
+        cycles--;
         uint8_t i = ld8(&pc);
 
         // PC and stack ops:
@@ -155,4 +156,72 @@ void trex_exec(struct trex_context *ctx, int cycles) {
     ctx->a = a;
     ctx->pc = pc;
     ctx->sp = sp;
+
+    return cycles;
+}
+
+// advance the scheduler to choose the next state machine, then execute the state machine for at most the specified number of cycles:
+void trex_exec(struct trex_context *ctx, int cycles) {
+    int last_cycles = 0;
+    while (cycles > 0 && cycles != last_cycles) {
+        // if necessary, find the next machine to execute:
+        if (!ctx->sm) {
+            for (int i = 0; i < ctx->machines_count && !ctx->sm; ++i, ++ctx->curr_machine) {
+                if (ctx->curr_machine >= ctx->machines_count) {
+                    ctx->curr_machine = 0;
+                }
+
+                ctx->sm = ctx->machines[ctx->curr_machine];
+                if (ctx->sm && ctx->sm->exec_status >= HALTED) {
+                    ctx->sm = 0;
+                }
+            }
+            if (!ctx->sm) {
+                // no machines to run:
+                return;
+            }
+
+            // reset the iteration counter:
+            ctx->iterations_remaining = ctx->sm->iterations;
+        }
+
+        if (ctx->sm->exec_status == READY) {
+            if (--ctx->iterations_remaining < 0) {
+                ctx->sm = 0;
+                continue;
+            }
+        } else if (ctx->sm->exec_status >= HALTED) {
+            ctx->sm = 0;
+            continue;
+        }
+
+        last_cycles = cycles;
+        cycles = trex_sm_exec(ctx, cycles);
+    }
+}
+
+
+void trex_context_init(
+    struct trex_context *ctx,
+    void *hostdata,
+    uint32_t *stack,
+    unsigned stack_size
+) {
+    ctx->hostdata = hostdata;
+    ctx->stack_min = stack;
+    ctx->stack_max = stack + stack_size;
+
+    ctx->curr_machine = 0;
+    ctx->sm = 0;
+    ctx->iterations_remaining = 0;
+
+    ctx->a = 0;
+    ctx->pc = 0;
+    ctx->sp = 0;
+
+    ctx->expected_pops = 0;
+    ctx->expected_push = 0;
+
+    ctx->machines = 0;
+    ctx->machines_count = 0;
 }

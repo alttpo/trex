@@ -35,7 +35,7 @@ struct trex_syscall;
 // state machine:
 struct trex_sm {
     //// { readonly properties of state machine established on create:
-    uint8_t      priority; // 0..255
+    uint8_t      iterations; // number of iterations of state handlers to run
 
     // list of state handlers:
     const struct trex_sh *handlers;
@@ -94,7 +94,17 @@ struct trex_syscall {
 
 // trex context to contain state machines, handlers, scheduler, and syscalls
 struct trex_context {
+    // opaque pointer for the host's use:
+    void *hostdata;
+
+    // points to lowest address of the stack region:
+    uint32_t    *stack_min;
+    // points to one past the end of the stack region:
+    uint32_t    *stack_max;
+
     // current state handler execution state:
+    unsigned curr_machine;
+    signed iterations_remaining;
     struct trex_sm *sm;
 
     uint32_t    a;
@@ -105,17 +115,9 @@ struct trex_context {
     int expected_push;
     int expected_pops;
 
-    // points to lowest address of the stack region:
-    uint32_t    *stack_min;
-    // points to one past the end of the stack region:
-    uint32_t    *stack_max;
-
     // current list of all known state machines:
     struct trex_sm **machines;
     unsigned         machines_count;
-
-    // data for the host:
-    void *hostdata;
 };
 
 
@@ -127,6 +129,13 @@ void trex_push(struct trex_context *ctx, uint32_t val);
 // for syscall usage; pop a value off the stack:
 void trex_pop(struct trex_context *ctx, uint32_t *o_val);
 
-// execute the current state machine for a specified number of cycles:
-void trex_exec(struct trex_context *ctx, int cycles);
+// initialize a context with initial values for readonly properties:
+void trex_context_init(
+    struct trex_context *ctx,
+    void *hostdata,
+    uint32_t *stack,
+    unsigned stack_size
+);
 
+// advance the scheduler to choose the next state machine, then execute the state machine for at most the specified number of cycles:
+void trex_exec(struct trex_context *ctx, int cycles);
