@@ -190,20 +190,26 @@ void trex_exec(struct trex_context *ctx, int cycles) {
         }
 
         if (ctx->sm->exec_status == READY) {
-            if (--ctx->iterations_remaining < 0) {
+            // printf("%d] iterations = %d\n", ctx->curr_machine, ctx->iterations_remaining);
+            if (ctx->iterations_remaining == 0) {
+                // pick the next state machine to run:
                 ctx->sm = 0;
+                ctx->curr_machine++;
                 continue;
             }
+            ctx->iterations_remaining--;
         } else if (ctx->sm->exec_status >= HALTED) {
+            // pick the next state machine to run:
             ctx->sm = 0;
+            ctx->curr_machine++;
             continue;
         }
 
+        // execute the current state machine:
         last_cycles = cycles;
         cycles = trex_sm_exec(ctx, cycles);
     }
 }
-
 
 void trex_context_init(
     struct trex_context *ctx,
