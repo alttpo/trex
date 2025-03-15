@@ -57,7 +57,7 @@ int trex_sm_exec(struct trex_context *ctx, int cycles) {
 
     // make sure the state handler has been verified:
     if (sh->verify_status != VERIFIED) {
-        // TODO: set error
+        sm->exec_status = ERROR_UNVERIFIED;
         return cycles;
     }
 
@@ -90,18 +90,23 @@ int trex_sm_exec(struct trex_context *ctx, int cycles) {
             s->call(ctx);
             sp = ctx->sp;
 
-            // if we didn't error out, return to EXECUTING status:
-            if (sm->exec_status == IN_SYSCALL) {
-                if (ctx->expected_pops != 0) {
-                    sm->exec_status = ERRORED;
-                    break;
-                } else if (ctx->expected_push != 0) {
-                    sm->exec_status = ERRORED;
-                    break;
-                } else {
-                    sm->exec_status = EXECUTING;
-                }
+            // if syscall returned an error, return immediately:
+            if (sm->exec_status != IN_SYSCALL) {
+                break;
             }
+
+            // verify expected pops and pushes:
+            if (ctx->expected_pops != 0) {
+                sm->exec_status = ERROR_SYSC_MISMATCHED_ARGS;
+                break;
+            }
+            if (ctx->expected_push != 0) {
+                sm->exec_status = ERROR_SYSC_MISMATCHED_RETS;
+                break;
+            }
+
+            // resume normal execution:
+            sm->exec_status = EXECUTING;
         }
         else if (i == IMM1) a = ld8(&pc);                       // load immediate u8
         else if (i == IMM2) a = ld16(&pc);                      // load immediate u16
