@@ -83,11 +83,6 @@ Whitespace consists of ASCII spaces, `\t`, and `\n`.
 
 Whitespace may be used to separate `sexpr`s where parsing ambiguities arise.
 
-TODO:
-
-* does each state machine get its own register file and stack?
-* clarify state machine reset behavior between states - is stack cleared? are registers cleared?
-
 # Example
 Example interactive Trex session:
 

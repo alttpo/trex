@@ -166,6 +166,10 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
                 return;
             }
         }
+        else if (i == PSH1) { verify_pc(0);  ld8(&pc); }        // push immediate u8
+        else if (i == PSH2) { verify_pc(1); ld16(&pc); }        // push immediate u16
+        else if (i == PSH3) { verify_pc(2); ld24(&pc); }        // push immediate u24
+        else if (i == PSH4) { verify_pc(3); ld32(&pc); }        // push immediate u32
         else if (i == BZ                                        // branch forward if A zero
               || i == BNZ) {                                    // branch forward if A not zero
             verify_pc(0);
@@ -191,7 +195,7 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
             }
             pc++;
         }
-        else if (i == PSH) {                                    // push
+        else if (i == PSHA) {                                   // push
             // stack analysis happens in trex_sh_verify_branch_path
         }
         else if (i == POP) {                                    // pop
@@ -321,6 +325,10 @@ static void trex_sh_verify_branch_path(
             a = ld32(&pc);
             aknown = 1;
         }
+        else if (i == PSH1) {  ld8(&pc); --sp; verify_stko; }   // push immediate u8
+        else if (i == PSH2) { ld16(&pc); --sp; verify_stko; }   // push immediate u16
+        else if (i == PSH3) { ld24(&pc); --sp; verify_stko; }   // push immediate u24
+        else if (i == PSH4) { ld32(&pc); --sp; verify_stko; }   // push immediate u32
         else if (i == LDL1) {                                   // load from local
             pc++;
             aknown = 0;
@@ -392,7 +400,7 @@ static void trex_sh_verify_branch_path(
                 }
             }
         }
-        else if (i == PSH) {                                    // push
+        else if (i == PSHA) {                                   // push
             --sp;
             verify_stko;
         }

@@ -145,23 +145,19 @@ int test_readme_program(struct trex_context &ctx) {
     uint8_t sh0_code[] = {
         //; we write all the asm for 2C00 handler except the first byte and then enable it with the final write to 2C00:
         //(chip-use nmix)
-        IMM1, 1,
-        PSH,
+        PSH1, 1,
         SYS1, 0,
         //(chip-address-set 1)
-        IMM1, 1,
-        PSH,
+        PSH1, 1,
         SYS1, 1,
         //; write this 65816 asm to fxpak's NMI handler:
         //; 2C00   9C 00 2C   STZ   $2C00
         //; 2C03   6C EA FF   JMP   ($FFEA)
         //(chip-write-dword 002C6CEA)
-        IMM4, 0x00, 0x2C, 0x6C, 0xEA,
-        PSH,
+        PSH4, 0x00, 0x2C, 0x6C, 0xEA,
         SYS1, 7,
         //(chip-write-advance-byte     FF)
-        IMM1, 0xFF,
-        PSH,
+        PSH1, 0xFF,
         SYS1, 6,
         //; move to next state:
         //(set-state 1)
@@ -176,16 +172,13 @@ int test_readme_program(struct trex_context &ctx) {
     uint8_t sh1_code[] = {
         //; write the first byte of the asm routine to enable it:
         //(chip-use nmix)
-        IMM1, 1,
-        PSH,
+        PSH1, 1,
         SYS1, 0,
         //(chip-address-set 0)
-        IMM1, 0,
-        PSH,
+        PSH1, 0,
         SYS1, 1,
         //(chip-write-no-advance-byte 9C)
-        IMM1, 0x9C,
-        PSH,
+        PSH1, 0x9C,
         SYS1, 5,
         //; move to next state:
         //(set-state 2)
@@ -209,12 +202,10 @@ int test_readme_program(struct trex_context &ctx) {
         //(label nmi)
         //; NMI has fired! read 4 bytes from WRAM at $0010:
         //(chip-use wram)
-        IMM1, 0,
-        PSH,
+        PSH1, 0,
         SYS1, 0,
         //(chip-address-set 10)
-        IMM1, 0x10,
-        PSH,
+        PSH1, 0x10,
         SYS1, 1,
         //(chip-read-dword)
         SYS1, 4,

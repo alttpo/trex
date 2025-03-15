@@ -113,9 +113,13 @@ int trex_sm_exec(struct trex_context *ctx, int cycles) {
         else if (i == STL2) sm->locals[ld16(&pc)] = a;          // store to local
         else if (i == SST1) sm->nxst = ld8(&pc);                // set-state
         else if (i == SST2) sm->nxst = ld16(&pc);               // set-state
+        else if (i == PSH1) *--sp = ld8(&pc);                   // push immediate u8
+        else if (i == PSH2) *--sp = ld16(&pc);                  // push immediate u16
+        else if (i == PSH3) *--sp = ld24(&pc);                  // push immediate u24
+        else if (i == PSH4) *--sp = ld32(&pc);                  // push immediate u32
         else if (i == BZ)   pc = (a ? pc : pc + *pc) + 1;       // branch forward if A zero
         else if (i == BNZ)  pc = (a ? pc + *pc : pc) + 1;       // branch forward if A not zero
-        else if (i == PSH)  *--sp = a;                          // push
+        else if (i == PSHA) *--sp = a;                          // push
         else if (i == POP)  a = *sp++;                          // pop
 
         // stack ops:
