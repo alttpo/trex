@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 enum exec_status {
+    NOT_EXECUTABLE,
     READY,
     EXECUTING,
     IN_SYSCALL,
@@ -42,12 +43,12 @@ struct trex_sm {
     uint8_t      iterations; // number of iterations of state handlers to run
 
     // list of state handlers:
-    const struct trex_sh *handlers;
-    uint16_t              handlers_count;
+    struct trex_sh *handlers;
+    uint16_t        handlers_count;
 
     // list of syscalls:
-    const struct trex_syscall *syscalls;
-    uint16_t                   syscalls_count;
+    const struct trex_syscall **syscalls;
+    uint16_t                    syscalls_count;
 
     uint32_t    *locals;
     uint8_t      locals_count;
@@ -126,12 +127,25 @@ struct trex_context {
 
 
 // verify a state handler routine:
-void trex_sh_verify(struct trex_sm *sm, struct trex_sh *sh, signed stack_max);
+void trex_sh_verify(struct trex_context *ctx, struct trex_sm *sm, struct trex_sh *sh);
 
 // for syscall usage; push a value onto the stack:
 void trex_push(struct trex_context *ctx, uint32_t val);
 // for syscall usage; pop a value off the stack:
 void trex_pop(struct trex_context *ctx, uint32_t *o_val);
+
+// initialize a state machine:
+void trex_sm_init(
+    struct trex_context *ctx,
+    struct trex_sm *sm,
+    uint8_t      iterations,
+    struct trex_sh *handlers,
+    uint16_t        handlers_count,
+    const struct trex_syscall **syscalls,
+    uint16_t                    syscalls_count,
+    uint32_t    *locals,
+    uint8_t      locals_count
+);
 
 // initialize a context with initial values for readonly properties:
 void trex_context_init(

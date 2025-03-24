@@ -76,10 +76,10 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
         uint8_t i = ld8(&pc);
 
         // PC and stack ops:
-        if (i == SYS1) {
+        if (i == SYS1 || i == SYS2) {
             // syscall:
-            verify_pc(0);
-            uint16_t x = ld8(&pc);
+            verify_pc(i == SYS2 ? 1 : 0);
+            uint16_t x = i == SYS2 ? ld16(&pc) : ld8(&pc);
 
             // verify the syscall number is in range:
             if (x >= sm->syscalls_count) {
@@ -88,25 +88,7 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
             }
 
             // verify the syscall call function is provided:
-            const struct trex_syscall *s = sm->syscalls + x;
-            if (!s->call) {
-                sh->verify_status = INVALID_SYSCALL_UNMAPPED;
-                return;
-            }
-        }
-        else if (i == SYS2) {
-            // syscall:
-            verify_pc(1);
-            uint16_t x = ld16(&pc);
-
-            // verify the syscall number is in range:
-            if (x >= sm->syscalls_count) {
-                sh->verify_status = INVALID_SYSCALL_NUMBER;
-                return;
-            }
-
-            // verify the syscall call function is provided:
-            const struct trex_syscall *s = sm->syscalls + x;
+            const struct trex_syscall *s = sm->syscalls[x];
             if (!s->call) {
                 sh->verify_status = INVALID_SYSCALL_UNMAPPED;
                 return;
@@ -255,8 +237,8 @@ static void trex_sh_verify_branch_path(
     struct trex_sm *sm,
     struct trex_sh *sh,
     uint8_t *pc,
-    signed sp,
-    signed stack_max,
+    long sp,
+    long stack_max,
     uint32_t a,
     uint32_t aknown
 ) {
@@ -275,27 +257,10 @@ static void trex_sh_verify_branch_path(
         uint8_t i = ld8(&pc);
 
         // PC and stack ops:
-        if (i == SYS1) {
+        if (i == SYS1 || i == SYS2) {
             // syscall:
-            uint16_t x = ld8(&pc);
-            const struct trex_syscall *s = sm->syscalls + x;
-
-            // verify we can pop args:
-            for (int n = 0; n < s->args; n++) {
-                verify_stku;
-                sp++;
-            }
-            // verify we can push returns:
-            for (int n = 0; n < s->returns; n++) {
-                --sp;
-                verify_stko;
-            }
-            // no way to predict the return values here that go on the stack.
-        }
-        else if (i == SYS2) {
-            // syscall:
-            uint16_t x = ld16(&pc);
-            const struct trex_syscall *s = sm->syscalls + x;
+            uint16_t x = i == SYS2 ? ld16(&pc) : ld8(&pc);
+            const struct trex_syscall *s = sm->syscalls[x];
 
             // verify we can pop args:
             for (int n = 0; n < s->args; n++) {
@@ -463,7 +428,11 @@ static void trex_sh_verify_branch_path(
 // * no local access is out of bounds
 // * stack is empty on return for all branch paths
 // * all branches point to opcode start
-void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh, signed stack_max) {
+void trex_sh_verify(struct trex_context *ctx, struct trex_sm *sm, struct trex_sh* sh) {
+    if (sh->verify_status == VERIFIED) {
+        return;
+    }
+
     // start out unverified:
     sh->verify_status = UNVERIFIED;
     sh->branch_paths = 0;
@@ -479,6 +448,7 @@ void trex_sh_verify(struct trex_sm *sm, struct trex_sh* sh, signed stack_max) {
 
     // recursively verify all branch paths to a RET instruction:
     // start with A known to be 0.
+    long stack_max = ctx->stack_max - ctx->stack_min;
     trex_sh_verify_branch_path(sm, sh, sh->pc_start, stack_max, stack_max, 0, 1);
 
     // if we didn't error out then we've verified successfully:
