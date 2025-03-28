@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -157,3 +161,7 @@ void trex_context_init(
 
 // advance the scheduler to choose the next state machine, then execute the state machine for at most the specified number of cycles:
 void trex_exec(struct trex_context *ctx, int cycles);
+
+#ifdef __cplusplus
+}
+#endif

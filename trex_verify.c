@@ -1,3 +1,8 @@
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -457,3 +462,7 @@ void trex_sh_verify(struct trex_context *ctx, struct trex_sm *sm, struct trex_sh
         sh->invalid_pc = 0;
     }
 }
+
+#ifdef __cplusplus
+}
+#endif

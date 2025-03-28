@@ -1,3 +1,7 @@
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -285,3 +289,7 @@ void trex_sm_init(
         sm->exec_status = READY;
     }
 }
+
+#ifdef __cplusplus
+}
+#endif

@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // opcodes for state handler:
 enum {
     HALT,  RET,
@@ -19,3 +23,7 @@ enum {
     ADD,   SUB,   MUL,
     __OPCODE_COUNT
 };
+
+#ifdef __cplusplus
+}
+#endif

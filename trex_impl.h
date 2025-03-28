@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 static inline uint32_t ld8(uint8_t **p) {
@@ -27,3 +31,7 @@ static inline uint32_t ld32(uint8_t **p) {
     a |= (uint32_t)(*(*p)++) << 24;
     return a;
 }
+
+#ifdef __cplusplus
+}
+#endif
