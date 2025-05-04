@@ -174,8 +174,9 @@ int trex_sm_exec(struct trex_context *ctx, int cycles) {
 }
 
 // advance the scheduler to choose the next state machine, then execute the state machine for at most the specified number of cycles:
-void trex_exec(struct trex_context *ctx, int cycles) {
+void trex_exec(struct trex_context *ctx) {
     int last_cycles = 0;
+    int cycles = ctx->cycles_per_exec;
     while (cycles > 0 && cycles != last_cycles) {
         // if necessary, find the next machine to execute:
         if (!ctx->sm) {
@@ -233,9 +234,11 @@ void trex_context_init(
     struct trex_context *ctx,
     void *hostdata,
     uint32_t *stack,
-    unsigned stack_size
+    unsigned stack_size,
+    int cycles_per_exec
 ) {
     ctx->hostdata = hostdata;
+    ctx->cycles_per_exec = cycles_per_exec;
     ctx->stack_min = stack;
     ctx->stack_max = stack + stack_size;
 

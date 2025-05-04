@@ -238,17 +238,17 @@ int test_readme_program(struct trex_context &ctx) {
     chips[0].mem[0x13] = 0xAA;
 
     // execute the state machine:
-    trex_exec(&ctx, 1024);
+    trex_exec(&ctx);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
-    trex_exec(&ctx, 1024);
+    trex_exec(&ctx);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
     // run an iteration of state 2:
-    trex_exec(&ctx, 1024);
+    trex_exec(&ctx);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
     // pretend NMIX ran and reset $2C00 to 00:
     chips[1].mem[0] = 0;
     // rerun state 2:
-    trex_exec(&ctx, 1024);
+    trex_exec(&ctx);
     std::cout << "exec_status = " << sm.exec_status << std::endl;
 
     // verify results:
@@ -888,7 +888,7 @@ int main() {
     uint32_t stack[16] = {0};
     uint32_t locals[16] = {0};
 
-    trex_context_init(&ctx, 0, stack, 16);
+    trex_context_init(&ctx, 0, stack, 16, 1024);
 
     ctx.machines = machines;
     ctx.machines_count = 1;

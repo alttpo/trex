@@ -41,6 +41,8 @@ struct trex_sm;
 struct trex_sh;
 struct trex_syscall;
 
+typedef int (*trex_sh_fp)(int cycles);
+
 // state machine:
 struct trex_sm {
     //// { readonly properties of state machine established on create:
@@ -54,7 +56,7 @@ struct trex_sm {
     const struct trex_syscall **syscalls;
     uint16_t                    syscalls_count;
 
-    uint32_t    *locals;
+    uint32_t    *locals; // read/write area of memory for execution
     uint8_t      locals_count;
     //// }
 
@@ -103,30 +105,33 @@ struct trex_syscall {
 
 // trex context to contain state machines, handlers, scheduler, and syscalls
 struct trex_context {
-    // opaque pointer for the host's use:
-    void *hostdata;
+    // current state handler execution state:
+    uint32_t    a;
+    uint8_t     *pc;
+    uint32_t    *sp;
+
+    unsigned curr_machine;
+    int iterations_remaining;
+    struct trex_sm *sm;
+
+    // expectations of current syscall to verify it behaves as stated:
+    int expected_push;
+    int expected_pops;
 
     // points to lowest address of the stack region:
     uint32_t    *stack_min;
     // points to one past the end of the stack region:
     uint32_t    *stack_max;
 
-    // current state handler execution state:
-    unsigned curr_machine;
-    signed iterations_remaining;
-    struct trex_sm *sm;
-
-    uint32_t    a;
-    uint8_t     *pc;
-    uint32_t    *sp;
-
-    // expectations of current syscall to verify it behaves as stated:
-    int expected_push;
-    int expected_pops;
-
     // current list of all known state machines:
     struct trex_sm **machines;
     unsigned         machines_count;
+
+    // how many instructions to advance per trex_exec() call:
+    int cycles_per_exec;
+
+    // opaque pointer for the host's use:
+    void *hostdata;
 };
 
 
@@ -156,11 +161,12 @@ void trex_context_init(
     struct trex_context *ctx,
     void *hostdata,
     uint32_t *stack,
-    unsigned stack_size
+    unsigned stack_size,
+    int cycles_per_exec
 );
 
 // advance the scheduler to choose the next state machine, then execute the state machine for at most the specified number of cycles:
-void trex_exec(struct trex_context *ctx, int cycles);
+void trex_exec(struct trex_context *ctx);
 
 #ifdef __cplusplus
 }
