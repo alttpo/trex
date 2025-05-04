@@ -112,8 +112,8 @@ struct trex_syscall syscalls[] = {
     },
 };
 
-bool verify_sh(struct trex_sm &sm, struct trex_sh &sh) {
-    trex_sh_verify(&sm, &sh, 16);
+bool verify_sh(struct trex_context &ctx, struct trex_sm &sm, struct trex_sh &sh) {
+    trex_sh_verify(&ctx, &sm, &sh);
 
     std::cout << "verify_status = " << sh.verify_status
         << " (" << verify_status_names[sh.verify_status] << ")"
@@ -226,7 +226,7 @@ int test_readme_program(struct trex_context &ctx) {
 
     // verify the handler programs:
     for (int i = 0; i < sm.handlers_count; i++) {
-        if (!verify_sh(sm, sh[i])) {
+        if (!verify_sh(ctx, sm, sh[i])) {
             return 1;
         }
     }
@@ -304,7 +304,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p0;
     sh[0].pc_end = p0 + sizeof(p0);
 
-    if (!verify_sh(sm, sh[0])) {
+    if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
 
@@ -443,7 +443,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p1;
     sh[0].pc_end = p1 + sizeof(p1);
 
-    if (!verify_sh(sm, sh[0])) {
+    if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
 
@@ -841,7 +841,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p3;
     sh[0].pc_end = p3 + sizeof(p3);
 
-    if (!verify_sh(sm, sh[0])) {
+    if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
 
@@ -873,7 +873,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p2;
     sh[0].pc_end = p2 + sizeof(p2);
 
-    if (!verify_sh(sm, sh[0])) {
+    if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
 
@@ -899,9 +899,20 @@ int main() {
     sm.nxst = 0;
     sm.exec_status = READY;
 
+    const struct trex_syscall *syscall_ptrs[] = {
+        &syscalls[0],
+        &syscalls[1],
+        &syscalls[2],
+        &syscalls[3],
+        &syscalls[4],
+        &syscalls[5],
+        &syscalls[6],
+        &syscalls[7]
+    };
+
     sm.locals = locals;
     sm.locals_count = 16;
-    sm.syscalls = syscalls;
+    sm.syscalls = syscall_ptrs;
     sm.syscalls_count = sizeof(syscalls)/sizeof(struct trex_syscall);
     std::cout << sm.syscalls_count << " syscalls registered" << std::endl;
 
