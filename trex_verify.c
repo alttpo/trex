@@ -41,7 +41,11 @@ static inline int insert_sorted(uint8_t* a1[], uint8_t* a2[], int n, int cap, ui
     return n + 1;
 }
 
-static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
+static void trex_sh_verify_pass1(
+    const struct trex_context *ctx,
+    const struct trex_sm *sm,
+    struct trex_sh* sh
+) {
     uint8_t     *pc = sh->pc_start;
 
     // sorted list of branch-target PCs to verify must be pointed at opcodes
@@ -84,16 +88,16 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
         if (i == SYS1 || i == SYS2) {
             // syscall:
             verify_pc(i == SYS2 ? 1 : 0);
-            uint16_t x = i == SYS2 ? ld16(&pc) : ld8(&pc);
+            const uint16_t x = i == SYS2 ? ld16(&pc) : ld8(&pc);
 
             // verify the syscall number is in range:
-            if (x >= sm->syscalls_count) {
+            if (x >= ctx->syscalls_count) {
                 sh->verify_status = INVALID_SYSCALL_NUMBER;
                 return;
             }
 
             // verify the syscall call function is provided:
-            const struct trex_syscall *s = sm->syscalls[x];
+            const struct trex_syscall *s = &ctx->syscalls[x];
             if (!s->call) {
                 sh->verify_status = INVALID_SYSCALL_UNMAPPED;
                 return;
@@ -239,6 +243,7 @@ static void trex_sh_verify_pass1(struct trex_sm *sm, struct trex_sh* sh) {
 }
 
 static void trex_sh_verify_branch_path(
+    const struct trex_context *ctx,
     struct trex_sm *sm,
     struct trex_sh *sh,
     uint8_t *pc,
@@ -264,8 +269,8 @@ static void trex_sh_verify_branch_path(
         // PC and stack ops:
         if (i == SYS1 || i == SYS2) {
             // syscall:
-            uint16_t x = i == SYS2 ? ld16(&pc) : ld8(&pc);
-            const struct trex_syscall *s = sm->syscalls[x];
+            const uint16_t x = i == SYS2 ? ld16(&pc) : ld8(&pc);
+            const struct trex_syscall *s = &ctx->syscalls[x];
 
             // verify we can pop args:
             for (int n = 0; n < s->args; n++) {
@@ -332,7 +337,7 @@ static void trex_sh_verify_branch_path(
                     pc = a ? pc + 1 : targetpc;
                 } else {
                     // split off to verify the "A known to be zero" branch path:
-                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, stack_max, 0, 1);
+                    trex_sh_verify_branch_path(ctx, sm, sh, targetpc, sp, stack_max, 0, 1);
                     if (sh->verify_status != UNVERIFIED) {
                         // any error means we do not need to continue:
                         return;
@@ -357,8 +362,8 @@ static void trex_sh_verify_branch_path(
                     // A is a known value:
                     pc = a ? targetpc : pc + 1;
                 } else {
-                    // split off to verify the "A known to be NON zero" branch path:
-                    trex_sh_verify_branch_path(sm, sh, targetpc, sp, stack_max, 1, 1);
+                    // split off to verify the "A known to be NON-zero" branch path:
+                    trex_sh_verify_branch_path(ctx, sm, sh, targetpc, sp, stack_max, 1, 1);
                     if (sh->verify_status != UNVERIFIED) {
                         // any error means we do not need to continue:
                         return;
@@ -381,7 +386,7 @@ static void trex_sh_verify_branch_path(
             aknown = 0;
         }
 
-        // stack ops; we do not track stack values so we cannot predict the value of A afterwards:
+        // stack ops; we do not track stack values so we cannot predict the value of A afterward:
         else if (i == OR)   { verify_stku; sp++; aknown = 0; }
         else if (i == XOR)  { verify_stku; sp++; aknown = 0; }
         else if (i == AND)  { verify_stku; sp++; aknown = 0; }
@@ -433,7 +438,11 @@ static void trex_sh_verify_branch_path(
 // * no local access is out of bounds
 // * stack is empty on return for all branch paths
 // * all branches point to opcode start
-void trex_sh_verify(struct trex_context *ctx, struct trex_sm *sm, struct trex_sh* sh) {
+static void trex_sh_verify(
+    const struct trex_context *ctx,
+    struct trex_sm *sm,
+    struct trex_sh *sh
+) {
     if (sh->verify_status == VERIFIED) {
         return;
     }
@@ -445,7 +454,7 @@ void trex_sh_verify(struct trex_context *ctx, struct trex_sm *sm, struct trex_sh
     sh->depth = 0;
 
     // run pass 1 which does not follow branch paths:
-    trex_sh_verify_pass1(sm, sh);
+    trex_sh_verify_pass1(ctx, sm, sh);
     if (sh->verify_status != UNVERIFIED) {
         // any error means we do not move to pass 2:
         return;
@@ -454,12 +463,38 @@ void trex_sh_verify(struct trex_context *ctx, struct trex_sm *sm, struct trex_sh
     // recursively verify all branch paths to a RET instruction:
     // start with A known to be 0.
     long stack_max = ctx->stack_max - ctx->stack_min;
-    trex_sh_verify_branch_path(sm, sh, sh->pc_start, stack_max, stack_max, 0, 1);
+    trex_sh_verify_branch_path(ctx, sm, sh, sh->pc_start, stack_max, stack_max, 0, 1);
 
     // if we didn't error out then we've verified successfully:
     if (sh->verify_status == UNVERIFIED) {
         sh->verify_status = VERIFIED;
         sh->invalid_pc = 0;
+    }
+}
+
+void trex_sm_verify(
+    const struct trex_context *ctx,
+    struct trex_sm *sm,
+    const uint16_t  handlers_count,
+    struct trex_sh *handlers
+) {
+    sm->handlers_count = handlers_count;
+    sm->handlers = handlers;
+
+    bool valid = true;
+    sm->exec_status = NOT_EXECUTABLE;
+    for (int i = 0; i < handlers_count; i++) {
+        trex_sh_verify(
+            ctx,
+            sm,
+            &sm->handlers[i]
+        );
+        if (handlers[i].verify_status != VERIFIED) {
+            valid = false;
+        }
+    }
+    if (valid) {
+        sm->exec_status = READY;
     }
 }
 

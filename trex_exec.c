@@ -81,9 +81,8 @@ int trex_sm_exec(struct trex_context *ctx, int cycles) {
 
         // PC and stack ops:
         if (i == SYS1 || i == SYS2) {
-            uint16_t x;
-            x = (i == SYS2) ? ld16(&pc) : ld8(&pc);
-            const struct trex_syscall *s = sm->syscalls[x];
+            const uint16_t x = (i == SYS2) ? ld16(&pc) : ld8(&pc);
+            const struct trex_syscall *s = &ctx->syscalls[x];
 
             // switch to IN_SYSCALL status so we can verify push/pop calls:
             sm->exec_status = IN_SYSCALL;
@@ -185,7 +184,7 @@ void trex_exec(struct trex_context *ctx) {
                     ctx->curr_machine = 0;
                 }
 
-                ctx->sm = ctx->machines[ctx->curr_machine];
+                ctx->sm = &ctx->machines[ctx->curr_machine];
                 if (!ctx->sm) {
                     ctx->sm = 0;
                     continue;
@@ -235,12 +234,17 @@ void trex_context_init(
     void *hostdata,
     uint32_t *stack,
     unsigned stack_size,
-    int cycles_per_exec
+    int cycles_per_exec,
+    uint16_t                   syscalls_count,
+    const struct trex_syscall *syscalls
 ) {
     ctx->hostdata = hostdata;
     ctx->cycles_per_exec = cycles_per_exec;
     ctx->stack_min = stack;
     ctx->stack_max = stack + stack_size;
+
+    ctx->syscalls = syscalls;
+    ctx->syscalls_count = syscalls_count;
 
     ctx->curr_machine = 0;
     ctx->sm = 0;
@@ -261,36 +265,13 @@ void trex_sm_init(
     struct trex_context *ctx,
     struct trex_sm *sm,
     uint8_t      iterations,
-    struct trex_sh *handlers,
-    uint16_t        handlers_count,
-    const struct trex_syscall **syscalls,
-    uint16_t                    syscalls_count,
-    uint32_t    *locals,
-    uint8_t      locals_count
+    uint8_t      locals_count,
+    uint32_t    *locals
 ) {
     sm->exec_status = NOT_EXECUTABLE;
-    sm->handlers = handlers;
-    sm->handlers_count = handlers_count;
     sm->iterations = iterations;
     sm->locals = locals;
     sm->locals_count = locals_count;
-    sm->syscalls = syscalls;
-    sm->syscalls_count = syscalls_count;
-
-    bool valid = true;
-    for (int i = 0; i < handlers_count; i++) {
-        trex_sh_verify(
-            ctx,
-            sm,
-            &sm->handlers[i]
-        );
-        if (handlers[i].verify_status != VERIFIED) {
-            valid = false;
-        }
-    }
-    if (valid) {
-        sm->exec_status = READY;
-    }
 }
 
 #ifdef __cplusplus

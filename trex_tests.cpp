@@ -113,8 +113,6 @@ struct trex_syscall syscalls[] = {
 };
 
 bool verify_sh(struct trex_context &ctx, struct trex_sm &sm, struct trex_sh &sh) {
-    trex_sh_verify(&ctx, &sm, &sh);
-
     std::cout << "verify_status = " << sh.verify_status
         << " (" << verify_status_names[sh.verify_status] << ")"
         << std::endl;
@@ -135,12 +133,9 @@ bool verify_sh(struct trex_context &ctx, struct trex_sm &sm, struct trex_sh &sh)
 int test_readme_program(struct trex_context &ctx) {
     struct trex_sh sh[3];
 
-    auto &sm = *(ctx.machines[0]);
+    auto &sm = ctx.machines[0];
 
     std::cout << "readme:" << std::endl;
-
-    sm.handlers = sh;
-    sm.handlers_count = 3;
 
     uint8_t sh0_code[] = {
         //; we write all the asm for 2C00 handler except the first byte and then enable it with the final write to 2C00:
@@ -225,6 +220,7 @@ int test_readme_program(struct trex_context &ctx) {
     sh[2].pc_end = sh2_code + sizeof(sh2_code);
 
     // verify the handler programs:
+    trex_sm_verify(&ctx, &sm, 3, sh);
     for (int i = 0; i < sm.handlers_count; i++) {
         if (!verify_sh(ctx, sm, sh[i])) {
             return 1;
@@ -270,14 +266,11 @@ int test_readme_program(struct trex_context &ctx) {
 }
 
 int test_branch_verify(struct trex_context &ctx) {
-    auto &sm = *(ctx.machines[0]);
+    auto &sm = ctx.machines[0];
 
     struct trex_sh sh[1];
 
     std::cout << "branch verify:" << std::endl;
-
-    sm.handlers = sh;
-    sm.handlers_count = 1;
 
     uint8_t p0[] = {
         IMM1, 0,
@@ -304,6 +297,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p0;
     sh[0].pc_end = p0 + sizeof(p0);
 
+    trex_sm_verify(&ctx, &sm, 1, sh);
     if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
@@ -443,6 +437,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p1;
     sh[0].pc_end = p1 + sizeof(p1);
 
+    trex_sm_verify(&ctx, &sm, 1, sh);
     if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
@@ -841,6 +836,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p3;
     sh[0].pc_end = p3 + sizeof(p3);
 
+    trex_sm_verify(&ctx, &sm, 1, sh);
     if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
@@ -873,6 +869,7 @@ int test_branch_verify(struct trex_context &ctx) {
     sh[0].pc_start = p2;
     sh[0].pc_end = p2 + sizeof(p2);
 
+    trex_sm_verify(&ctx, &sm, 1, sh);
     if (!verify_sh(ctx, sm, sh[0])) {
         return 1;
     }
@@ -882,39 +879,31 @@ int test_branch_verify(struct trex_context &ctx) {
 
 int main() {
     struct trex_context ctx;
-    struct trex_sm sm;
-    struct trex_sm *machines[1];
+    struct trex_sm machines[1];
 
-    uint32_t stack[16] = {0};
+    uint32_t stack[16]  = {0};
     uint32_t locals[16] = {0};
 
-    trex_context_init(&ctx, 0, stack, 16, 1024);
+    trex_context_init(
+        &ctx,
+        nullptr,
+        stack,
+        16,
+        1024,
+        sizeof(syscalls)/sizeof(struct trex_syscall),
+        syscalls
+    );
 
-    ctx.machines = machines;
     ctx.machines_count = 1;
-    ctx.machines[0] = &sm;
+    ctx.machines = machines;
 
-    sm.iterations = 1;
-    sm.st = 0;
-    sm.nxst = 0;
-    sm.exec_status = READY;
-
-    const struct trex_syscall *syscall_ptrs[] = {
-        &syscalls[0],
-        &syscalls[1],
-        &syscalls[2],
-        &syscalls[3],
-        &syscalls[4],
-        &syscalls[5],
-        &syscalls[6],
-        &syscalls[7]
-    };
-
-    sm.locals = locals;
-    sm.locals_count = 16;
-    sm.syscalls = syscall_ptrs;
-    sm.syscalls_count = sizeof(syscalls)/sizeof(struct trex_syscall);
-    std::cout << sm.syscalls_count << " syscalls registered" << std::endl;
+    trex_sm_init(
+        &ctx,
+        &machines[0],
+        1,
+        16,
+        locals
+    );
 
     test_branch_verify(ctx);
 

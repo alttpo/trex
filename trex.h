@@ -5,7 +5,6 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include <stdbool.h>
 
 enum exec_status {
     NOT_EXECUTABLE,
@@ -36,47 +35,8 @@ enum verify_status {
     INVALID_SYSCALL_UNMAPPED,
 };
 
-struct trex_context;
-struct trex_sm;
-struct trex_sh;
-struct trex_syscall;
-
-typedef int (*trex_sh_fp)(int cycles);
-
-// state machine:
-struct trex_sm {
-    //// { readonly properties of state machine established on create:
-    uint8_t      iterations; // number of iterations of state handlers to run
-
-    // list of state handlers:
-    struct trex_sh *handlers;
-    uint16_t        handlers_count;
-
-    // list of syscalls:
-    const struct trex_syscall **syscalls;
-    uint16_t                    syscalls_count;
-
-    uint32_t    *locals; // read/write area of memory for execution
-    uint8_t      locals_count;
-    //// }
-
-    //// { mutable properties of state machine:
-    // current execution status:
-    enum exec_status exec_status;
-    // current state number:
-    uint16_t    st;
-    // next state number:
-    uint16_t    nxst;
-    //// }
-};
-
 // state handler:
 struct trex_sh {
-    // points to where program code starts:
-    uint8_t *pc_start;
-    // points to one past last program byte:
-    uint8_t *pc_end;
-
     // verification status:
     enum verify_status verify_status;
 
@@ -87,7 +47,37 @@ struct trex_sh {
     uint32_t max_depth;
     uint32_t max_targets;
     uint32_t depth;
+
+    // points to where program code starts:
+    uint8_t *pc_start;
+    // points to one past last program byte:
+    uint8_t *pc_end;
 };
+
+// state machine:
+struct trex_sm {
+    //// mutable properties of state machine:
+    // current execution status:
+    enum exec_status exec_status;
+    // current state number:
+    uint16_t         st;
+    // next state number:
+    uint16_t         nxst;
+
+    //// readonly properties of state machine established on create:
+    // number of iterations of state handlers to run
+    uint8_t        iterations;
+
+    // read/write area of memory for execution
+    uint8_t        locals_count;
+    uint32_t      *locals;
+
+    // list of state handlers
+    uint16_t        handlers_count;
+    struct trex_sh *handlers;
+};
+
+struct trex_context;
 
 // syscall descriptor:
 struct trex_syscall {
@@ -111,8 +101,9 @@ struct trex_context {
     uint32_t    *sp;
 
     unsigned curr_machine;
-    int iterations_remaining;
     struct trex_sm *sm;
+
+    int iterations_remaining;
 
     // expectations of current syscall to verify it behaves as stated:
     int expected_push;
@@ -123,9 +114,13 @@ struct trex_context {
     // points to one past the end of the stack region:
     uint32_t    *stack_max;
 
-    // current list of all known state machines:
-    struct trex_sm **machines;
-    unsigned         machines_count;
+    // list of all syscalls:
+    uint16_t                   syscalls_count;
+    const struct trex_syscall *syscalls;
+
+    // list of all state machines:
+    unsigned        machines_count;
+    struct trex_sm *machines;
 
     // how many instructions to advance per trex_exec() call:
     int cycles_per_exec;
@@ -134,39 +129,41 @@ struct trex_context {
     void *hostdata;
 };
 
-
-// verify a state handler routine:
-void trex_sh_verify(struct trex_context *ctx, struct trex_sm *sm, struct trex_sh *sh);
-
-// for syscall usage; push a value onto the stack:
-void trex_push(struct trex_context *ctx, uint32_t val);
-// for syscall usage; pop a value off the stack:
-void trex_pop(struct trex_context *ctx, uint32_t *o_val);
-
-// initialize a state machine:
-void trex_sm_init(
-    struct trex_context *ctx,
-    struct trex_sm *sm,
-    uint8_t      iterations,
-    struct trex_sh *handlers,
-    uint16_t        handlers_count,
-    const struct trex_syscall **syscalls,
-    uint16_t                    syscalls_count,
-    uint32_t    *locals,
-    uint8_t      locals_count
-);
-
 // initialize a context with initial values for readonly properties:
 void trex_context_init(
     struct trex_context *ctx,
     void *hostdata,
     uint32_t *stack,
     unsigned stack_size,
-    int cycles_per_exec
+    int cycles_per_exec,
+    uint16_t                   syscalls_count,
+    const struct trex_syscall *syscalls
+);
+
+// initialize a state machine:
+void trex_sm_init(
+    struct trex_context *ctx,
+    struct trex_sm *sm,
+    uint8_t      iterations,
+    uint8_t      locals_count,
+    uint32_t    *locals
+);
+
+// provide state handlers to a state machine and verify them all:
+void trex_sm_verify(
+    const struct trex_context *ctx,
+    struct trex_sm *sm,
+    uint16_t        handlers_count,
+    struct trex_sh *handlers
 );
 
 // advance the scheduler to choose the next state machine, then execute the state machine for at most the specified number of cycles:
 void trex_exec(struct trex_context *ctx);
+
+// for syscall usage; push a value onto the stack:
+void trex_push(struct trex_context *ctx, uint32_t val);
+// for syscall usage; pop a value off the stack:
+void trex_pop(struct trex_context *ctx, uint32_t *o_val);
 
 #ifdef __cplusplus
 }
